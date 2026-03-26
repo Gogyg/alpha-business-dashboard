@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { authAPI } from '../utils/api';
-import { Lock, Mail, User, AlertCircle } from 'lucide-react';
+import { Lock, Mail, User, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -54,24 +54,26 @@ export default function Login() {
 
       <div className="w-full max-w-md relative z-10">
         {/* Logo/Title */}
-        <div className="text-center mb-8">
-          <div className="inline-block p-4 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 backdrop-blur-xl border border-white/10 mb-4">
-            <div className="text-4xl">📊</div>
+        <div className="text-center mb-10">
+          <div className="inline-block p-1 bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl mb-6 shadow-2xl shadow-blue-500/20">
+            <div className="bg-[#0a0f1e] p-6 rounded-[22px] backdrop-blur-2xl">
+              <div className="text-5xl">📊</div>
+            </div>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Альфа-Бизнес Дашборд
+          <h1 className="text-4xl font-black text-white mb-3 tracking-tight">
+            Альфа-Бизнес <span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">Дашборд</span>
           </h1>
-          <p className="text-gray-400">
-            {isForgot ? 'Восстановление доступа' : isLogin ? 'Войдите в систему' : 'Создайте аккаунт'}
+          <p className="text-gray-400 text-lg font-medium">
+            {isForgot ? 'Восстановление доступа' : isLogin ? 'Добро пожаловать' : 'Создать аккаунт'}
           </p>
         </div>
 
         {/* Login/Signup Form */}
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
+        <div className="bg-white/5 backdrop-blur-3xl border border-white/10 rounded-[40px] p-10 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {!isLogin && (
+            {!isLogin && !isForgot && (
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-semibold text-gray-400 mb-2 ml-1">
                   Имя
                 </label>
                 <div className="relative">
@@ -89,7 +91,7 @@ export default function Login() {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-semibold text-gray-400 mb-2 ml-1">
                 Email
               </label>
               <div className="relative">
@@ -107,7 +109,7 @@ export default function Login() {
 
             {!isForgot && (
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-semibold text-gray-400 mb-2 ml-1">
                   Пароль
                 </label>
                 <div className="relative">
@@ -123,7 +125,7 @@ export default function Login() {
                   />
                 </div>
                 {isLogin && (
-                  <div className="mt-2 text-right">
+                  <div className="mt-3 text-right">
                     <button
                       type="button"
                       onClick={() => {
@@ -131,7 +133,7 @@ export default function Login() {
                         setError('');
                         setSuccess('');
                       }}
-                      className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                      className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-wider"
                     >
                       Забыли пароль?
                     </button>
@@ -141,15 +143,15 @@ export default function Login() {
             )}
 
             {success && (
-              <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 text-sm">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-400 text-sm">
+                <CheckCircle className="w-5 h-5 flex-shrink-0" />
                 <span>{success}</span>
               </div>
             )}
 
             {error && (
-              <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
                 <span>{error}</span>
               </div>
             )}
@@ -157,13 +159,16 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium rounded-xl hover:from-blue-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-4 px-6 bg-gradient-to-r from-blue-500 via-blue-600 to-purple-600 text-white font-bold rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed group overflow-hidden relative"
             >
-              {loading ? 'Загрузка...' : isForgot ? 'Сбросить пароль' : isLogin ? 'Войти' : 'Создать аккаунт'}
+              <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+              <span className="relative z-10">
+                {loading ? 'Загрузка...' : isForgot ? 'Сбросить пароль' : isLogin ? 'Войти' : 'Создать аккаунт'}
+              </span>
             </button>
           </form>
 
-          <div className="mt-6 text-center space-y-4">
+          <div className="mt-8 text-center space-y-4">
             {isForgot ? (
               <button
                 onClick={() => {
@@ -171,9 +176,9 @@ export default function Login() {
                   setError('');
                   setSuccess('');
                 }}
-                className="text-gray-400 hover:text-white transition-colors text-sm"
+                className="text-gray-400 hover:text-white transition-all text-sm font-semibold uppercase tracking-widest"
               >
-                Вернуться к входу
+                ← К входу
               </button>
             ) : (
               <button
@@ -182,9 +187,9 @@ export default function Login() {
                   setError('');
                   setSuccess('');
                 }}
-                className="text-gray-400 hover:text-white transition-colors text-sm"
+                className="text-gray-400 hover:text-white transition-all text-sm font-semibold uppercase tracking-widest"
               >
-                {isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
+                {isLogin ? 'Нет аккаунта? Регистрация' : 'Уже есть аккаунт? Войти'}
               </button>
             )}
           </div>
