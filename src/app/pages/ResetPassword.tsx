@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { authAPI, supabase } from '../utils/api';
 import { Lock, AlertCircle, CheckCircle } from 'lucide-react';
+import logoImage from '../../assets/5b6ead3363f3911c8fbce32735c6a3c819462945.png';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -58,8 +59,8 @@ export default function ResetPassword() {
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-10">
           <div className="inline-block p-1 bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl mb-6 shadow-2xl shadow-blue-500/20">
-            <div className="bg-[#0a0f1e] p-6 rounded-[22px] backdrop-blur-2xl">
-              <div className="text-5xl">🔐</div>
+            <div className="bg-[#0a0f1e] p-2 rounded-[22px] backdrop-blur-2xl">
+              <img src={logoImage} alt="Alpha" className="w-16 h-16 rounded-[18px]" />
             </div>
           </div>
           <h1 className="text-4xl font-black text-white mb-3 tracking-tight">
