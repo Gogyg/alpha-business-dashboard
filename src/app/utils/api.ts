@@ -107,7 +107,13 @@ const dbSave = async (table: string, quarter: string | null, rowData: any) => {
   return { success: true };
 };
 
-// VOC API
+// Dashboard API (Red Cap)
+export const dashboardAPI = {
+  get: (quarter: string) => dbGet('voc_metrics', quarter), // Reusing voc_metrics or we can rename it
+  save: (quarter: string, data: any) => dbSave('voc_metrics', quarter, data),
+};
+
+// VOC API (If separate is needed, but we can bundle it)
 export const vocAPI = {
   get: (quarter: string) => dbGet('voc_metrics', quarter),
   save: (quarter: string, data: any) => dbSave('voc_metrics', quarter, data),

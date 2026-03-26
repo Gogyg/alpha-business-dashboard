@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Save, Eye, EyeOff } from 'lucide-react';
+import { Save, Eye, EyeOff, Loader2, Trash2 } from 'lucide-react';
 import { useOutletContext } from 'react-router';
 import { ProgressCircle } from '../components/ProgressCircle';
 import { PasswordModal } from '../components/PasswordModal';
+import { metricsAPI } from '../utils/api';
 
 interface OutletContext {
   currentQuarter: string;
@@ -16,15 +17,18 @@ export function Metrics() {
   const { currentQuarter, currentYear, isEditingMode, setIsEditingMode } = useOutletContext<OutletContext>();
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const [quarterData, setQuarterData] = useState(() => {
-    const stored = localStorage.getItem('metrics-data');
-    return stored ? JSON.parse(stored) : {};
-  });
-
-  useEffect(() => {
-    localStorage.setItem('metrics-data', JSON.stringify(quarterData));
-  }, [quarterData]);
+  const [techStandards, setTechStandards] = useState<any>(null);
+  const [salesStandard, setSalesStandard] = useState<any>(null);
+  const [designStandard, setDesignStandard] = useState<any>(null);
+  const [planningNext, setPlanningNext] = useState<any[]>([]);
+  const [convergence, setConvergence] = useState<any[]>([]);
+  const [t2m, setT2m] = useState<any[]>([]);
+  const [utilization, setUtilization] = useState<any[]>([]);
+  const [defects, setDefects] = useState<any[]>([]);
+  const [keshp, setKeshp] = useState<any[]>([]);
+  const [hiddenWidgets, setHiddenWidgets] = useState<any>({});
 
   useEffect(() => {
     if (isEditingMode && !isEditing) {
@@ -34,10 +38,7 @@ export function Metrics() {
     }
   }, [isEditingMode]);
 
-  const getCurrentData = () => quarterData[currentQuarter] || getDefaultData();
-  const setCurrentData = (data: any) => {
-    setQuarterData((prev: any) => ({ ...prev, [currentQuarter]: data }));
-  };
+  const getCurrentData = () => getDefaultData();
 
   function getDefaultData() {
     const hasData = currentQuarter === 'Q1';
@@ -111,35 +112,39 @@ export function Metrics() {
     };
   }
 
-  const data = getCurrentData();
-  const [techStandards, setTechStandards] = useState(data.techStandards);
-  const [salesStandard, setSalesStandard] = useState(data.salesStandard);
-  const [designStandard, setDesignStandard] = useState(data.designStandard);
-  const [planningNext, setPlanningNext] = useState(data.planningNext);
-  const [convergence, setConvergence] = useState(data.convergence);
-  const [t2m, setT2m] = useState(data.t2m);
-  const [utilization, setUtilization] = useState(data.utilization);
-  const [defects, setDefects] = useState(data.defects);
-  const [keshp, setKeshp] = useState(data.keshp);
-  const [hiddenWidgets, setHiddenWidgets] = useState(data.hiddenWidgets || {});
+  // Initial load and manual save are handled by the useEffect and handleSave functions above.
 
   useEffect(() => {
-    const newData = getCurrentData();
-    setTechStandards(newData.techStandards);
-    setSalesStandard(newData.salesStandard);
-    setDesignStandard(newData.designStandard);
-    setPlanningNext(newData.planningNext);
-    setConvergence(newData.convergence);
-    setT2m(newData.t2m);
-    setUtilization(newData.utilization);
-    setDefects(newData.defects);
-    setKeshp(newData.keshp);
-    setHiddenWidgets(newData.hiddenWidgets || {});
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const result = await metricsAPI.get(currentQuarter);
+        const sourceData = result || getDefaultData();
+        
+        setTechStandards(sourceData.techStandards);
+        setSalesStandard(sourceData.salesStandard);
+        setDesignStandard(sourceData.designStandard);
+        setPlanningNext(sourceData.planningNext);
+        setConvergence(sourceData.convergence);
+        setT2m(sourceData.t2m);
+        setUtilization(sourceData.utilization);
+        setDefects(sourceData.defects);
+        setKeshp(sourceData.keshp);
+        setHiddenWidgets(sourceData.hiddenWidgets || {});
+      } catch (err) {
+        console.error('Failed to load metrics:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
   }, [currentQuarter]);
 
-  useEffect(() => {
-    if (isEditing) {
-      setCurrentData({
+  const handleSave = async () => {
+    if (!isEditing) return;
+    try {
+      setLoading(true);
+      await metricsAPI.save(currentQuarter, {
         techStandards,
         salesStandard,
         designStandard,
@@ -151,8 +156,31 @@ export function Metrics() {
         keshp,
         hiddenWidgets,
       });
+
+      // Mirror to localStorage for Export functionality in Layout
+      const stored = localStorage.getItem('metrics-data');
+      const allData = stored ? JSON.parse(stored) : {};
+      allData[currentQuarter] = {
+        techStandards,
+        salesStandard,
+        designStandard,
+        planningNext,
+        convergence,
+        t2m,
+        utilization,
+        defects,
+        keshp,
+        hiddenWidgets,
+      };
+      localStorage.setItem('metrics-data', JSON.stringify(allData));
+      setIsEditing(false);
+      setIsEditingMode(false);
+    } catch (err) {
+      alert('Ошибка при сохранении: ' + (err as any).message);
+    } finally {
+      setLoading(false);
     }
-  }, [techStandards, salesStandard, designStandard, planningNext, convergence, t2m, utilization, defects, keshp, hiddenWidgets, isEditing]);
+  };
 
   const handlePasswordSuccess = () => {
     setIsPasswordModalOpen(false);
@@ -190,8 +218,16 @@ export function Metrics() {
     return cycle[current];
   };
 
+  if (loading || !techStandards) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-screen">
+        <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="p-8 pt-4">
+    <div className="p-8 pt-4 min-h-screen">
       <div className="max-w-5xl mx-auto">
         <div className="space-y-6">
           {/* Standards Section - 3 columns like VOC/eNPS/visibility */}
@@ -795,9 +831,17 @@ export function Metrics() {
         </div>
 
         {isEditing && (
-          <div className="fixed bottom-8 right-8">
-            <button onClick={() => { setIsEditing(false); setIsEditingMode(false); }}
-              className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 border border-emerald-500/50 shadow-lg shadow-emerald-500/30 text-white px-3 py-2 rounded-xl flex items-center gap-2 transition-all text-sm backdrop-blur-xl">
+          <div className="fixed bottom-8 right-8 flex gap-3 z-[100]">
+            <button 
+              onClick={() => { setIsEditing(false); setIsEditingMode(false); window.location.reload(); }} 
+              className="bg-white/5 hover:bg-white/10 border border-white/10 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all text-sm backdrop-blur-xl"
+            >
+              <Trash2 size={16} />Отменить
+            </button>
+            <button 
+              onClick={handleSave}
+              className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 border border-emerald-500/50 shadow-lg shadow-emerald-500/30 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all text-sm backdrop-blur-xl"
+            >
               <Save size={16} />Сохранить
             </button>
           </div>

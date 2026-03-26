@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { X, Plus, Edit2, Trash2, Save } from 'lucide-react';
+import { X, Plus, Edit2, Trash2, Save, Loader2 } from 'lucide-react';
+import { teamAPI } from '../utils/api';
 
 interface TeamMember {
   id: number;
@@ -60,20 +61,33 @@ export function TeamManagementModal({ isOpen, onClose }: TeamManagementModalProp
   const [teamData, setTeamData] = useState<TeamMember[]>([]);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [filterStream, setFilterStream] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem('team-data');
-    if (stored) {
-      setTeamData(JSON.parse(stored));
-    } else {
-      setTeamData(DEFAULT_TEAM_DATA);
-      localStorage.setItem('team-data', JSON.stringify(DEFAULT_TEAM_DATA));
+    if (isOpen) {
+      loadTeamData();
     }
-  }, []);
+  }, [isOpen]);
 
-  const saveTeamData = (data: TeamMember[]) => {
+  const loadTeamData = async () => {
+    setLoading(true);
+    try {
+      const result = await teamAPI.get();
+      setTeamData(result && result.length > 0 ? result : DEFAULT_TEAM_DATA);
+    } catch (err) {
+      console.error('Failed to load team data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveTeamDataToSupabase = async (data: TeamMember[]) => {
     setTeamData(data);
-    localStorage.setItem('team-data', JSON.stringify(data));
+    try {
+      await teamAPI.save(data);
+    } catch (err) {
+      console.error('Failed to save team data:', err);
+    }
   };
 
   const addMember = () => {
@@ -89,15 +103,15 @@ export function TeamManagementModal({ isOpen, onClose }: TeamManagementModalProp
 
   const updateMember = (member: TeamMember) => {
     if (teamData.find(m => m.id === member.id)) {
-      saveTeamData(teamData.map(m => m.id === member.id ? member : m));
+      saveTeamDataToSupabase(teamData.map(m => m.id === member.id ? member : m));
     } else {
-      saveTeamData([...teamData, member]);
+      saveTeamDataToSupabase([...teamData, member]);
     }
     setEditingMember(null);
   };
 
   const deleteMember = (id: number) => {
-    saveTeamData(teamData.filter(m => m.id !== id));
+    saveTeamDataToSupabase(teamData.filter(m => m.id !== id));
   };
 
   const filteredData = filterStream 
@@ -215,45 +229,51 @@ export function TeamManagementModal({ isOpen, onClose }: TeamManagementModalProp
             </div>
           )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-800/50">
-                  <th className="text-left text-gray-500 text-sm pb-3 px-2">Продукты</th>
-                  <th className="text-left text-gray-500 text-sm pb-3 px-2">ФИО (PO)</th>
-                  <th className="text-left text-gray-500 text-sm pb-3 px-2">Стрим</th>
-                  <th className="text-left text-gray-500 text-sm pb-3 px-2">Руководитель</th>
-                  <th className="text-left text-gray-500 text-sm pb-3 px-2 w-24">Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredData.map(member => (
-                  <tr key={member.id} className="border-b border-gray-800/30 hover:bg-gray-800/20">
-                    <td className="py-3 px-2 text-white text-sm">{member.product}</td>
-                    <td className="py-3 px-2 text-white text-sm">{member.fio}</td>
-                    <td className="py-3 px-2 text-gray-400 text-sm">{member.stream}</td>
-                    <td className="py-3 px-2 text-gray-400 text-sm">{member.leader}</td>
-                    <td className="py-3 px-2">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setEditingMember(member)}
-                          className="p-1 hover:bg-blue-600/20 rounded transition-colors"
-                        >
-                          <Edit2 size={16} className="text-blue-400" />
-                        </button>
-                        <button
-                          onClick={() => deleteMember(member.id)}
-                          className="p-1 hover:bg-red-600/20 rounded transition-colors"
-                        >
-                          <Trash2 size={16} className="text-red-400" />
-                        </button>
-                      </div>
-                    </td>
+          {loading ? (
+            <div className="flex-1 flex items-center justify-center p-12">
+              <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-800/50">
+                    <th className="text-left text-gray-500 text-sm pb-3 px-2">Продукты</th>
+                    <th className="text-left text-gray-500 text-sm pb-3 px-2">ФИО (PO)</th>
+                    <th className="text-left text-gray-500 text-sm pb-3 px-2">Стрим</th>
+                    <th className="text-left text-gray-500 text-sm pb-3 px-2">Руководитель</th>
+                    <th className="text-left text-gray-500 text-sm pb-3 px-2 w-24">Действия</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filteredData.map(member => (
+                    <tr key={member.id} className="border-b border-gray-800/30 hover:bg-gray-800/20">
+                      <td className="py-3 px-2 text-white text-sm">{member.product}</td>
+                      <td className="py-3 px-2 text-white text-sm">{member.fio}</td>
+                      <td className="py-3 px-2 text-gray-400 text-sm">{member.stream}</td>
+                      <td className="py-3 px-2 text-gray-400 text-sm">{member.leader}</td>
+                      <td className="py-3 px-2">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setEditingMember(member)}
+                            className="p-1 hover:bg-blue-600/20 rounded transition-colors"
+                          >
+                            <Edit2 size={16} className="text-blue-400" />
+                          </button>
+                          <button
+                            onClick={() => deleteMember(member.id)}
+                            className="p-1 hover:bg-red-600/20 rounded transition-colors"
+                          >
+                            <Trash2 size={16} className="text-red-400" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         <div className="p-6 border-t border-gray-700/30">

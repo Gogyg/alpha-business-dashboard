@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Search, Save } from 'lucide-react';
+import { teamAPI } from '../utils/api';
 
 interface TeamMember {
   id: number;
@@ -55,9 +56,18 @@ export function SelectExecutorModal({
   const [newGoal, setNewGoal] = useState<Partial<Goal> | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem('team-data');
-    if (stored) {
-      setTeamData(JSON.parse(stored));
+    const loadTeamData = async () => {
+      try {
+        const result = await teamAPI.get();
+        if (result && result.length > 0) {
+          setTeamData(result);
+        }
+      } catch (err) {
+        console.error('Failed to load team data in selector:', err);
+      }
+    };
+    if (isOpen) {
+      loadTeamData();
     }
   }, [isOpen]);
 

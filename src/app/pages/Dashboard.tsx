@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Save, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Save, Plus, Trash2, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useOutletContext } from 'react-router';
 import { PasswordModal } from '../components/PasswordModal';
+import { dashboardAPI } from '../utils/api';
 
 interface OutletContext {
   currentQuarter: string;
@@ -27,15 +28,16 @@ export function Dashboard() {
   const { currentQuarter, currentYear, isEditingMode, setIsEditingMode } = useOutletContext<OutletContext>();
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const [quarterData, setQuarterData] = useState(() => {
-    const stored = localStorage.getItem('dashboard-data');
-    return stored ? JSON.parse(stored) : {};
-  });
-
-  useEffect(() => {
-    localStorage.setItem('dashboard-data', JSON.stringify(quarterData));
-  }, [quarterData]);
+  const [digitalMetrics, setDigitalMetrics] = useState<Metric[]>([]);
+  const [stabilityMetrics, setStabilityMetrics] = useState<Metric[]>([]);
+  const [productionMetrics, setProductionMetrics] = useState<Metric[]>([]);
+  const [vocData, setVocData] = useState<any>({});
+  const [enpsData, setEnpsData] = useState<any>({});
+  const [visibilityData, setVisibilityData] = useState<any>({});
+  const [totalsConfig, setTotalsConfig] = useState<any>(getDefaultData().totalsConfig);
+  const [hiddenWidgets, setHiddenWidgets] = useState<any>({});
 
   useEffect(() => {
     if (isEditingMode && !isEditing) {
@@ -45,10 +47,7 @@ export function Dashboard() {
     }
   }, [isEditingMode]);
 
-  const getCurrentData = () => quarterData[currentQuarter] || getDefaultData();
-  const setCurrentData = (data: any) => {
-    setQuarterData((prev: any) => ({ ...prev, [currentQuarter]: data }));
-  };
+  const getCurrentData = () => getDefaultData();
 
   function getDefaultData() {
     const hasData = currentQuarter === 'Q1';
@@ -86,31 +85,35 @@ export function Dashboard() {
     };
   }
 
-  const data = getCurrentData();
-  const [digitalMetrics, setDigitalMetrics] = useState(data.digitalMetrics);
-  const [stabilityMetrics, setStabilityMetrics] = useState(data.stabilityMetrics);
-  const [productionMetrics, setProductionMetrics] = useState(data.productionMetrics);
-  const [vocData, setVocData] = useState(data.vocData);
-  const [enpsData, setEnpsData] = useState(data.enpsData);
-  const [visibilityData, setVisibilityData] = useState(data.visibilityData);
-  const [totalsConfig, setTotalsConfig] = useState(data.totalsConfig || getDefaultData().totalsConfig);
-  const [hiddenWidgets, setHiddenWidgets] = useState(data.hiddenWidgets || {});
-
   useEffect(() => {
-    const newData = getCurrentData();
-    setDigitalMetrics(newData.digitalMetrics);
-    setStabilityMetrics(newData.stabilityMetrics);
-    setProductionMetrics(newData.productionMetrics);
-    setVocData(newData.vocData);
-    setEnpsData(newData.enpsData);
-    setVisibilityData(newData.visibilityData);
-    setTotalsConfig(newData.totalsConfig || getDefaultData().totalsConfig);
-    setHiddenWidgets(newData.hiddenWidgets || {});
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const result = await dashboardAPI.get(currentQuarter);
+        const sourceData = result || getDefaultData();
+        
+        setDigitalMetrics(sourceData.digitalMetrics);
+        setStabilityMetrics(sourceData.stabilityMetrics);
+        setProductionMetrics(sourceData.productionMetrics);
+        setVocData(sourceData.vocData);
+        setEnpsData(sourceData.enpsData);
+        setVisibilityData(sourceData.visibilityData);
+        setTotalsConfig(sourceData.totalsConfig || getDefaultData().totalsConfig);
+        setHiddenWidgets(sourceData.hiddenWidgets || {});
+      } catch (err) {
+        console.error('Failed to load dashboard data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
   }, [currentQuarter]);
 
-  useEffect(() => {
-    if (isEditing) {
-      setCurrentData({
+  const handleSave = async () => {
+    if (!isEditing) return;
+    try {
+      setLoading(true);
+      await dashboardAPI.save(currentQuarter, {
         digitalMetrics,
         stabilityMetrics,
         productionMetrics,
@@ -120,8 +123,29 @@ export function Dashboard() {
         totalsConfig,
         hiddenWidgets,
       });
+
+      // Mirror to localStorage for Export functionality in Layout
+      const stored = localStorage.getItem('dashboard-data');
+      const allData = stored ? JSON.parse(stored) : {};
+      allData[currentQuarter] = {
+        digitalMetrics,
+        stabilityMetrics,
+        productionMetrics,
+        vocData,
+        enpsData,
+        visibilityData,
+        totalsConfig,
+        hiddenWidgets,
+      };
+      localStorage.setItem('dashboard-data', JSON.stringify(allData));
+      setIsEditing(false);
+      setIsEditingMode(false);
+    } catch (err) {
+      alert('Ошибка при сохранении: ' + (err as any).message);
+    } finally {
+      setLoading(false);
     }
-  }, [digitalMetrics, stabilityMetrics, productionMetrics, vocData, enpsData, visibilityData, totalsConfig, hiddenWidgets, isEditing]);
+  };
 
   const calculateScore = (metrics: Metric[]) => {
     let totalWeight = 0;
@@ -438,6 +462,14 @@ export function Dashboard() {
     );
   };
 
+  if (loading || !totalsConfig) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-screen">
+        <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="p-8 pt-4 min-h-screen">
       <div className="max-w-5xl mx-auto">
@@ -602,9 +634,17 @@ export function Dashboard() {
         </div>
 
         {isEditing && (
-          <div className="fixed bottom-8 right-8">
-            <button onClick={() => { setIsEditing(false); setIsEditingMode(false); }} 
-              className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 border border-emerald-500/50 shadow-lg shadow-emerald-500/30 text-white px-3 py-2 rounded-xl flex items-center gap-2 transition-all text-sm backdrop-blur-xl">
+          <div className="fixed bottom-8 right-8 flex gap-3 z-[100]">
+            <button 
+              onClick={() => { setIsEditing(false); setIsEditingMode(false); window.location.reload(); }} 
+              className="bg-white/5 hover:bg-white/10 border border-white/10 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all text-sm backdrop-blur-xl"
+            >
+              <Trash2 size={16} />Отменить
+            </button>
+            <button 
+              onClick={handleSave}
+              className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 border border-emerald-500/50 shadow-lg shadow-emerald-500/30 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all text-sm backdrop-blur-xl"
+            >
               <Save size={16} />Сохранить
             </button>
           </div>

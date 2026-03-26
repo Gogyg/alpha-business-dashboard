@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router';
-import { Plus, Filter, MessageSquare, Send, Check, X, Edit2, Trash2, Users, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Filter, MessageSquare, Send, Check, X, Edit2, Trash2, Users, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { TeamManagementModal } from '../components/TeamManagementModal';
 import { SelectExecutorModal } from '../components/SelectExecutorModal';
 import { PasswordModal } from '../components/PasswordModal';
+import { goalsAPI } from '../utils/api';
 
 interface OutletContext {
   currentQuarter: string;
@@ -44,11 +45,8 @@ export function Goals() {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [pendingGoalId, setPendingGoalId] = useState<number | null>(null);
   const [pendingAction, setPendingAction] = useState<'approve' | 'close' | null>(null);
-  
-  const [quarterData, setQuarterData] = useState(() => {
-    const stored = localStorage.getItem('goals-data');
-    return stored ? JSON.parse(stored) : {};
-  });
+  const [loading, setLoading] = useState(true);
+  const [goals, setGoals] = useState<Goal[]>([]);
 
   const [filters, setFilters] = useState({
     stream: '',
@@ -66,26 +64,34 @@ export function Goals() {
     return stored ? JSON.parse(stored) : { executor: '', team: '', stream: '' };
   });
 
-  const getCurrentData = () => quarterData[currentQuarter] || { goals: [] };
-  const setCurrentData = (data: any) => {
-    setQuarterData((prev: any) => ({ ...prev, [currentQuarter]: data }));
-  };
-
-  const data = getCurrentData();
-  const [goals, setGoals] = useState<Goal[]>(data.goals || []);
-
   useEffect(() => {
-    localStorage.setItem('goals-data', JSON.stringify(quarterData));
-  }, [quarterData]);
-
-  useEffect(() => {
-    const newData = getCurrentData();
-    setGoals(newData.goals || []);
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const result = await goalsAPI.get(currentQuarter);
+        setGoals(result?.goals || []);
+      } catch (err) {
+        console.error('Failed to load goals:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
   }, [currentQuarter]);
 
-  useEffect(() => {
-    setCurrentData({ goals });
-  }, [goals]);
+  const saveToSupabase = async (updatedGoals: Goal[]) => {
+    try {
+      await goalsAPI.save(currentQuarter, { goals: updatedGoals });
+      
+      // Mirror to localStorage for Export functionality in Layout
+      const stored = localStorage.getItem('goals-data');
+      const allData = stored ? JSON.parse(stored) : {};
+      allData[currentQuarter] = { goals: updatedGoals };
+      localStorage.setItem('goals-data', JSON.stringify(allData));
+    } catch (err) {
+      console.error('Failed to save goals to Supabase:', err);
+    }
+  };
 
   const handleExecutorSelect = (executor: string, team: string, stream: string, goalData?: Partial<Goal>) => {
     const newExecutorData = { executor, team, stream };
@@ -109,6 +115,7 @@ export function Goals() {
     
     const updatedGoals = [...goals, newGoal];
     setGoals(updatedGoals);
+    saveToSupabase(updatedGoals);
     setIsSelectExecutorModalOpen(false);
   };
 
@@ -119,11 +126,13 @@ export function Goals() {
   const updateGoal = (id: number, updates: Partial<Goal>) => {
     const updatedGoals = goals.map(g => g.id === id ? { ...g, ...updates } : g);
     setGoals(updatedGoals);
+    saveToSupabase(updatedGoals);
   };
 
   const deleteGoal = (id: number) => {
     const updatedGoals = goals.filter(g => g.id !== id);
     setGoals(updatedGoals);
+    saveToSupabase(updatedGoals);
   };
 
   const sendForApproval = (id: number) => {
@@ -265,8 +274,16 @@ export function Goals() {
     setIsPasswordModalOpen(true);
   };
 
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-screen">
+        <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="p-4 md:p-8 pt-4">
+    <div className="p-4 md:p-8 pt-4 min-h-screen">
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Analytics Banners */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
