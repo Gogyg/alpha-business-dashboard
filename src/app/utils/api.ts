@@ -17,10 +17,7 @@ export const removeAuthToken = () => localStorage.removeItem('auth_token');
 
 export const getCurrentUser = () => {
   const userStr = localStorage.getItem('current_user');
-  if (!userStr) {
-    return { name: 'Гостевой доступ', email: 'guest@example.com' };
-  }
-  return JSON.parse(userStr);
+  return userStr ? JSON.parse(userStr) : null;
 };
 export const setCurrentUser = (user: any) => localStorage.setItem('current_user', JSON.stringify(user));
 export const removeCurrentUser = () => localStorage.removeItem('current_user');

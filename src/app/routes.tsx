@@ -8,6 +8,12 @@ import { getAuthToken } from "./utils/api";
 
 // Protected route component (Auth temporarily disabled by user request)
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const isAuthenticated = !!getAuthToken();
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  
   return <>{children}</>;
 };
 
