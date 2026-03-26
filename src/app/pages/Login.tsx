@@ -6,19 +6,25 @@ import { Lock, Mail, User, AlertCircle } from 'lucide-react';
 export default function Login() {
   const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
+  const [isForgot, setIsForgot] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setLoading(true);
 
     try {
-      if (isLogin) {
+      if (isForgot) {
+        await authAPI.sendPasswordResetEmail(email);
+        setSuccess('Ссылка для сброса пароля отправлена на почту!');
+      } else if (isLogin) {
         await authAPI.login(email, password);
         navigate('/');
       } else {
@@ -56,7 +62,7 @@ export default function Login() {
             Альфа-Бизнес Дашборд
           </h1>
           <p className="text-gray-400">
-            {isLogin ? 'Войдите в систему' : 'Создайте аккаунт'}
+            {isForgot ? 'Восстановление доступа' : isLogin ? 'Войдите в систему' : 'Создайте аккаунт'}
           </p>
         </div>
 
@@ -99,23 +105,47 @@ export default function Login() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Пароль
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
-                  placeholder="••••••••"
-                />
+            {!isForgot && (
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Пароль
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                    placeholder="••••••••"
+                  />
+                </div>
+                {isLogin && (
+                  <div className="mt-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsForgot(true);
+                        setError('');
+                        setSuccess('');
+                      }}
+                      className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                    >
+                      Забыли пароль?
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
+
+            {success && (
+              <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 text-sm">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{success}</span>
+              </div>
+            )}
 
             {error && (
               <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
@@ -129,20 +159,34 @@ export default function Login() {
               disabled={loading}
               className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium rounded-xl hover:from-blue-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Загрузка...' : isLogin ? 'Войти' : 'Создать аккаунт'}
+              {loading ? 'Загрузка...' : isForgot ? 'Сбросить пароль' : isLogin ? 'Войти' : 'Создать аккаунт'}
             </button>
           </form>
 
-          <div className="mt-6 text-center">
-            <button
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setError('');
-              }}
-              className="text-gray-400 hover:text-white transition-colors text-sm"
-            >
-              {isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
-            </button>
+          <div className="mt-6 text-center space-y-4">
+            {isForgot ? (
+              <button
+                onClick={() => {
+                  setIsForgot(false);
+                  setError('');
+                  setSuccess('');
+                }}
+                className="text-gray-400 hover:text-white transition-colors text-sm"
+              >
+                Вернуться к входу
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setError('');
+                  setSuccess('');
+                }}
+                className="text-gray-400 hover:text-white transition-colors text-sm"
+              >
+                {isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
+              </button>
+            )}
           </div>
         </div>
 

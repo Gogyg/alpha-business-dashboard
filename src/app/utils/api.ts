@@ -56,6 +56,20 @@ export const authAPI = {
     removeAuthToken();
     removeCurrentUser();
   },
+  
+  sendPasswordResetEmail: async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) throw new Error(error.message);
+    return { success: true };
+  },
+
+  updatePassword: async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw new Error(error.message);
+    return { success: true };
+  },
 };
 
 // Generic DB helper

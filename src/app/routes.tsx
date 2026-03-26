@@ -4,6 +4,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Metrics } from "./pages/Metrics";
 import { Goals } from "./pages/Goals";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
 import { getAuthToken } from "./utils/api";
 
 // Protected route component (Auth temporarily disabled by user request)
@@ -21,6 +22,10 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     Component: Login,
+  },
+  {
+    path: "/reset-password",
+    Component: ResetPassword,
   },
   {
     path: "/",
