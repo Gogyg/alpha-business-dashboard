@@ -3,6 +3,9 @@ import { Layout } from "./components/Layout";
 import { Dashboard } from "./pages/Dashboard";
 import { Metrics } from "./pages/Metrics";
 import { Goals } from "./pages/Goals";
+import { EventsDashboard } from "./pages/EventsDashboard";
+import { KshCdpoPage } from "./pages/KshCdpoPage";
+import { KshCdpoDashboard } from "./pages/KshCdpoDashboard";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import { getAuthToken } from "./utils/api";
@@ -36,8 +39,11 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, Component: Dashboard },
+      { path: "dashboard", Component: EventsDashboard },
       { path: "metrics", Component: Metrics },
       { path: "goals", Component: Goals },
+      { path: "ksh-cdpo", Component: KshCdpoPage },
+      { path: "ksh-cdpo/:dashboardId", Component: KshCdpoDashboard },
     ],
   },
 ]);

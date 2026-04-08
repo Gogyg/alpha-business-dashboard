@@ -1,12 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
-import { projectId, publicAnonKey } from '/utils/supabase/info';
+import { publicAnonKey, supabasePublicUrl } from '/utils/supabase/info';
 
-const supabaseUrl = `https://${projectId}.supabase.co`;
+const supabaseUrl = supabasePublicUrl;
 
-// Use the publishable key provided by the user if the environment variable is not set correctly
-const anonKey = publicAnonKey && publicAnonKey !== 'your-anon-key-here' 
-  ? publicAnonKey 
-  : 'sb_publishable_bIcF4s7vI-47M0foSVBnqQ_HTGOeCFe';
+if (!publicAnonKey || publicAnonKey === 'your-anon-key-here') {
+  throw new Error('Missing VITE_SUPABASE_ANON_KEY. Please configure environment variables.');
+}
+
+const anonKey = publicAnonKey;
 
 export const supabase = createClient(supabaseUrl, anonKey);
 
@@ -135,4 +136,81 @@ export const goalsAPI = {
 export const teamAPI = {
   get: () => dbGet('team_data'),
   save: (data: any) => dbSave('team_data', null, data),
+};
+
+// Events API
+export const eventsAPI = {
+  get: () => dbGet('events'),
+  save: (data: any) => dbSave('events', null, data),
+};
+
+// Menu config API
+export const menuAPI = {
+  get: () => dbGet('menu_config'),
+  save: (data: any) => dbSave('menu_config', null, data),
+};
+
+// KSH CDPO API
+export const kshCdpoAPI = {
+  getDashboards: async () => {
+    const { data, error } = await supabase.from('ksh_cdpo_dashboards').select('*').order('created_at', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data;
+  },
+  getWidgets: async (dashboardId: string) => {
+    const { data, error } = await supabase
+      .from('ksh_cdpo_widgets')
+      .select('widgets')
+      .eq('dashboard_id', dashboardId)
+      .limit(1);
+    if (error) throw new Error(error.message);
+    return data?.[0]?.widgets || null;
+  },
+  createDashboard: async (title: string, description: string) => {
+    const { error } = await supabase
+      .from('ksh_cdpo_dashboards')
+      .insert({ title, description });
+    if (error) throw new Error(error.message);
+    return { success: true };
+  },
+  deleteDashboard: async (id: string) => {
+    // Delete associated widgets first
+    await supabase.from('ksh_cdpo_widgets').delete().eq('dashboard_id', id);
+    // Delete the dashboard itself
+    const { error } = await supabase
+      .from('ksh_cdpo_dashboards')
+      .delete()
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+    return { success: true };
+  },
+  updateDashboard: async (id: string, title: string, description: string) => {
+    const { error } = await supabase
+      .from('ksh_cdpo_dashboards')
+      .update({ title, description })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+    return { success: true };
+  },
+  saveWidgets: async (dashboardId: string, widgets: any) => {
+    const { data: existing } = await supabase
+      .from('ksh_cdpo_widgets')
+      .select('id')
+      .eq('dashboard_id', dashboardId)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      const { error } = await supabase
+        .from('ksh_cdpo_widgets')
+        .update({ widgets, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await supabase
+        .from('ksh_cdpo_widgets')
+        .insert({ dashboard_id: dashboardId, widgets });
+      if (error) throw new Error(error.message);
+    }
+    return { success: true };
+  }
 };

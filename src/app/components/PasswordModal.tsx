@@ -10,13 +10,19 @@ interface PasswordModalProps {
 export function PasswordModal({ isOpen, onClose, onSuccess }: PasswordModalProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const editPassword = import.meta.env.VITE_EDIT_PASSWORD;
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (password === 'md520') {
+
+    if (!editPassword) {
+      setError('Пароль редактирования не настроен в переменных окружения');
+      return;
+    }
+
+    if (password === editPassword) {
       onSuccess();
       setPassword('');
       setError('');

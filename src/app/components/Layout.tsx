@@ -1,20 +1,140 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
-import { BarChart3, Target, ChevronLeft, ChevronRight, Edit3, X, Goal, Download, LogOut, User } from 'lucide-react';
-import { useState } from 'react';
+import { BarChart3, Target, ChevronLeft, ChevronRight, Edit3, X, Goal, Download, LogOut, CalendarDays, Settings, EyeOff, Eye, ArrowUp, ArrowDown, Save, TrendingUp } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import logoImage from '../../assets/5b6ead3363f3911c8fbce32735c6a3c819462945.png';
 import * as XLSX from 'xlsx';
-import { authAPI, getCurrentUser } from '../utils/api';
+import { authAPI, getCurrentUser, goalsAPI, menuAPI } from '../utils/api';
+import { PasswordModal } from './PasswordModal';
+
+interface MenuItemConfig {
+  id: 'scorecard' | 'events' | 'metrics' | 'goals' | 'ksh-cdpo';
+  label: string;
+  hidden?: boolean;
+  order: number;
+}
+
+const DEFAULT_MENU: MenuItemConfig[] = [
+  { id: 'scorecard', label: 'Красная шапочка', order: 1 },
+  { id: 'events', label: 'Дашборд', order: 2 },
+  { id: 'metrics', label: 'Важные метрики', order: 3 },
+  { id: 'goals', label: 'Цели квартала', order: 4 },
+  { id: 'ksh-cdpo', label: 'КШ CDPO', order: 5 },
+];
+
+const MENU_META = {
+  scorecard: { path: '/', icon: Target },
+  events: { path: '/dashboard', icon: CalendarDays },
+  metrics: { path: '/metrics', icon: BarChart3 },
+  goals: { path: '/goals', icon: Goal },
+  'ksh-cdpo': { path: '/ksh-cdpo', icon: TrendingUp },
+};
 
 export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [currentQuarter, setCurrentQuarter] = useState('Q1');
-  const [currentYear] = useState(2026);
+  const [currentQuarter, setCurrentQuarter] = useState(() => {
+    const month = new Date().getMonth();
+    return `Q${Math.floor(month / 3) + 1}`;
+  });
+  const [currentYear] = useState(() => new Date().getFullYear());
   const [isEditingMode, setIsEditingMode] = useState(false);
+  const [menuConfig, setMenuConfig] = useState<MenuItemConfig[]>(DEFAULT_MENU);
+  const [menuDraft, setMenuDraft] = useState<MenuItemConfig[]>([]);
+  const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
+  const [isMenuPasswordOpen, setIsMenuPasswordOpen] = useState(false);
   const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
   const currentUser = getCurrentUser();
 
   const isActive = (path: string) => location.pathname === path;
+  const isMenuPathActive = (path: string) => {
+    if (path === '/') return location.pathname === '/';
+    if (path === '/ksh-cdpo') return location.pathname.startsWith('/ksh-cdpo');
+    return location.pathname === path;
+  };
+  const showEditButton =
+    isActive('/') ||
+    isActive('/metrics') ||
+    isActive('/dashboard') ||
+    location.pathname.startsWith('/ksh-cdpo');
+  const showGoalsExport = isActive('/goals');
+
+  useEffect(() => {
+    const loadMenu = async () => {
+      try {
+        const result = await menuAPI.get();
+        const data = result?.items || result;
+        const normalized = Array.isArray(data) ? data : [];
+        const merged = DEFAULT_MENU.map((item) => {
+          const found = normalized.find((entry: any) => entry.id === item.id);
+          return {
+            ...item,
+            label: found?.label || item.label,
+            hidden: typeof found?.hidden === 'boolean' ? found.hidden : false,
+            order: typeof found?.order === 'number' ? found.order : item.order,
+          };
+        });
+        setMenuConfig(merged);
+      } catch (err) {
+        console.error('Failed to load menu config:', err);
+        setMenuConfig(DEFAULT_MENU);
+      }
+    };
+    loadMenu();
+  }, []);
+
+  const visibleMenu = useMemo(() => {
+    return [...menuConfig]
+      .filter((item) => !item.hidden)
+      .sort((a, b) => a.order - b.order);
+  }, [menuConfig]);
+
+  const sortedMenuDraft = useMemo(
+    () => [...menuDraft].sort((a, b) => a.order - b.order),
+    [menuDraft],
+  );
+
+  const openMenuSettings = () => {
+    setMenuDraft([...menuConfig].sort((a, b) => a.order - b.order));
+    setIsMenuModalOpen(true);
+  };
+
+  const handleMenuSave = async () => {
+    try {
+      const normalized = menuDraft.map((item, index) => ({
+        ...item,
+        order: index + 1,
+      }));
+      setMenuConfig(normalized);
+      await menuAPI.save({ items: normalized });
+      setIsMenuModalOpen(false);
+    } catch (err) {
+      alert('Ошибка при сохранении меню: ' + (err as any).message);
+    }
+  };
+
+  const handleMenuCancel = () => {
+    setIsMenuModalOpen(false);
+    setMenuDraft([]);
+  };
+
+  const moveMenuItem = (id: MenuItemConfig['id'], direction: 'up' | 'down') => {
+    setMenuDraft((prev) => {
+      const sorted = [...prev].sort((a, b) => a.order - b.order);
+      const index = sorted.findIndex((item) => item.id === id);
+      if (index < 0) return prev;
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= sorted.length) return prev;
+      const current = sorted[index];
+      const swap = sorted[targetIndex];
+      sorted[targetIndex] = { ...current, order: swap.order };
+      sorted[index] = { ...swap, order: current.order };
+      return sorted;
+    });
+  };
+
+  const updateMenuItem = (id: MenuItemConfig['id'], updates: Partial<MenuItemConfig>) => {
+    setMenuDraft((prev) => prev.map((item) => (item.id === id ? { ...item, ...updates } : item)));
+  };
 
   const handleLogout = () => {
     authAPI.logout();
@@ -42,34 +162,34 @@ export function Layout() {
     const dashData = dashboardData[currentQuarter] || {};
     const dashRows = [];
     
-    dashRows.push(["Виджет", "Показатель", "Вес", "Факт", "План", "% Выполнения"]);
+    dashRows.push(["Виджет", "Показатель", "Вес", "Факт", "Тип", "План", "% Выполнения", "Макс%"]);
     
     if (dashData.digitalMetrics) {
-      dashData.digitalMetrics.forEach((m: any) => dashRows.push(["SCORE-КАРТА", m.name, m.weight, m.fact, m.plan, m.percent]));
+      dashData.digitalMetrics.forEach((m: any) => dashRows.push(["SCORE-КАРТА", m.name, m.weight, m.fact, m.type || '=', m.plan, m.percent, m.maxPercent || '∞']));
     }
     if (dashData.stabilityMetrics) {
-      dashData.stabilityMetrics.forEach((m: any) => dashRows.push(["СТАБИЛЬНОСТЬ/ПРОЕКТЫ", m.name, m.weight, m.fact, m.plan, m.percent]));
+      dashData.stabilityMetrics.forEach((m: any) => dashRows.push(["СТАБИЛЬНОСТЬ/ПРОЕКТЫ", m.name, m.weight, m.fact, m.type || '=', m.plan, m.percent, m.maxPercent || '∞']));
     }
     if (dashData.productionMetrics) {
-      dashData.productionMetrics.forEach((m: any) => dashRows.push(["ПРОИЗВОДСТВО", m.name, m.weight, m.fact, m.plan, m.percent]));
+      dashData.productionMetrics.forEach((m: any) => dashRows.push(["ПРОИЗВОДСТВО", m.name, m.weight, m.fact, m.type || '=', m.plan, m.percent, m.maxPercent || '∞']));
     }
     
     if (dashData.vocData) {
       dashRows.push([]);
-      dashRows.push(["VOC Канал АБ", "НИБ", "", dashData.vocData.nib, dashData.vocData.plan || dashData.vocData.range, ""]);
-      dashRows.push(["", "ММБ", "", dashData.vocData.mmb, "", ""]);
-      dashRows.push(["", "СБ", "", dashData.vocData.sb, "", ""]);
-      dashRows.push(["", "КИБ", "", dashData.vocData.kib, "", ""]);
+      dashRows.push(["VOC Канал АБ", "НИБ", "", dashData.vocData.nib, "", dashData.vocData.plan || dashData.vocData.range, "", ""]);
+      dashRows.push(["", "ММБ", "", dashData.vocData.mmb, "", "", "", ""]);
+      dashRows.push(["", "СБ", "", dashData.vocData.sb, "", "", "", ""]);
+      dashRows.push(["", "КИБ", "", dashData.vocData.kib, "", "", "", ""]);
     }
     
     if (dashData.enpsData) {
       dashRows.push([]);
-      dashRows.push(["eNPS", "Значение", "", dashData.enpsData.value, dashData.enpsData.plan, ""]);
+      dashRows.push(["eNPS", "Значение", "", dashData.enpsData.value, "", dashData.enpsData.plan, "", ""]);
     }
     
     if (dashData.visibilityData) {
       dashRows.push([]);
-      dashRows.push(["Visibility", "Значение", "", dashData.visibilityData.value, dashData.visibilityData.plan, ""]);
+      dashRows.push(["Visibility", "Значение", "", dashData.visibilityData.value, "", dashData.visibilityData.plan, "", ""]);
     }
 
     const metData = metricsData[currentQuarter] || {};
@@ -128,51 +248,59 @@ export function Layout() {
     XLSX.writeFile(wb, `Дашборд_${currentQuarter}_${currentYear}.xlsx`);
   };
 
-  const handleExportGoals = () => {
-    const goalsDataStr = localStorage.getItem('goals-data');
-    const goalsData = goalsDataStr ? JSON.parse(goalsDataStr) : {};
-    
-    const goals = goalsData[currentQuarter]?.goals || [];
-    
-    const wb = XLSX.utils.book_new();
-    const rows = [];
-    
-    rows.push([
-      "ID",
-      "Описание цели",
-      "Категория",
-      "Вес (%)",
-      "План",
-      "Факт",
-      "% выполнения",
-      "Статус",
-      "Исполнитель",
-      "Команда",
-      "Стрим",
-      "Количество комментариев"
-    ]);
-    
-    goals.forEach((goal: any) => {
+  const handleExportGoals = async () => {
+    try {
+      const dbGoals = await goalsAPI.get(currentQuarter);
+      const goalsFromDb = dbGoals?.goals || [];
+
+      const goalsDataStr = localStorage.getItem('goals-data');
+      const goalsData = goalsDataStr ? JSON.parse(goalsDataStr) : {};
+      const goalsFromLocal = goalsData[currentQuarter]?.goals || [];
+
+      const goals = goalsFromDb.length > 0 ? goalsFromDb : goalsFromLocal;
+
+      const wb = XLSX.utils.book_new();
+      const rows = [];
+
       rows.push([
-        goal.id,
-        goal.description,
-        goal.category,
-        goal.weight,
-        goal.plan,
-        goal.fact,
-        goal.completionPercent ?? '',
-        goal.status,
-        goal.executor,
-        goal.team,
-        goal.stream,
-        goal.comments?.length || 0
+        'ID',
+        'Описание цели',
+        'Категория',
+        'Вес (%)',
+        'План',
+        'Факт',
+        '% выполнения',
+        'Статус',
+        'Исполнитель',
+        'Команда',
+        'Стрим',
+        'Количество комментариев'
       ]);
-    });
 
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, "Цели квартала");
+      goals.forEach((goal: any) => {
+        rows.push([
+          goal.id,
+          goal.description,
+          goal.category,
+          goal.weight,
+          goal.plan,
+          goal.fact,
+          goal.completionPercent ?? '',
+          goal.status,
+          goal.executor,
+          goal.team,
+          goal.stream,
+          goal.comments?.length || 0
+        ]);
+      });
 
-    XLSX.writeFile(wb, `Цели_${currentQuarter}_${currentYear}.xlsx`);
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, 'Цели квартала');
+      XLSX.writeFile(wb, `Цели_${currentQuarter}_${currentYear}.xlsx`);
+    } catch (err) {
+      console.error('Failed to export goals:', err);
+      alert('Ошибка при выгрузке целей. Проверьте подключение к базе данных.');
+    }
   };
 
   return (
@@ -188,56 +316,54 @@ export function Layout() {
             <span className="text-white font-semibold hidden sm:inline">Альфа-Бизнес</span>
           </div>
           <div className="md:hidden flex gap-2">
-            <Link to="/" className={`p-2 rounded-xl transition-all ${isActive('/') ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30' : 'text-gray-400 hover:text-white'}`}>
-              <Target size={20} />
-            </Link>
-            <Link to="/metrics" className={`p-2 rounded-xl transition-all ${isActive('/metrics') ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30' : 'text-gray-400 hover:text-white'}`}>
-              <BarChart3 size={20} />
-            </Link>
-            <Link to="/goals" className={`p-2 rounded-xl transition-all ${isActive('/goals') ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30' : 'text-gray-400 hover:text-white'}`}>
-              <Goal size={20} />
-            </Link>
+            {visibleMenu.map((item) => {
+              const meta = MENU_META[item.id];
+              const Icon = meta.icon;
+              return (
+                <Link
+                  key={item.id}
+                  to={meta.path}
+                  className={`p-2 rounded-xl transition-all ${isActive(meta.path) ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30' : 'text-gray-400 hover:text-white'}`}
+                >
+                  <Icon size={20} />
+                </Link>
+              );
+            })}
           </div>
         </div>
 
         {/* Navigation - Desktop */}
         <nav className="hidden md:flex flex-1 p-4 flex-col">
-          <Link
-            to="/"
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl mb-2 transition-all duration-300 ${
-              isActive('/') 
-                ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30' 
-                : 'text-gray-400 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <Target size={20} />
-            <span>Красная шапочка</span>
-          </Link>
-          <Link
-            to="/metrics"
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl mb-2 transition-all duration-300 ${
-              isActive('/metrics') 
-                ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30' 
-                : 'text-gray-400 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <BarChart3 size={20} />
-            <span>Важные метрики</span>
-          </Link>
-          <Link
-            to="/goals"
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${
-              isActive('/goals') 
-                ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30' 
-                : 'text-gray-400 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <Goal size={20} />
-            <span>Цели квартала</span>
-          </Link>
+          {visibleMenu.map((item) => {
+            const meta = MENU_META[item.id];
+            const Icon = meta.icon;
+            return (
+              <Link
+                key={item.id}
+                to={meta.path}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl mb-2 transition-all duration-300 ${
+                  isMenuPathActive(meta.path)
+                    ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30'
+                    : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <Icon size={20} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
 
           {/* Spacer */}
           <div className="flex-1"></div>
+
+          <button
+            onClick={() => setIsMenuPasswordOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:text-white text-sm transition-all opacity-60 hover:opacity-100"
+            title="Настроить меню"
+          >
+            <Settings size={16} />
+            <span className="sr-only">Настроить меню</span>
+          </button>
 
           {/* User Info & Logout */}
           <div className="border-t border-white/10 pt-4 mt-4">
@@ -272,7 +398,7 @@ export function Layout() {
           <div className="p-4 md:p-8 md:pb-4">
             <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 md:gap-4 w-full">
               {/* Title with Gradient */}
-              <h1 className="text-2xl md:text-4xl font-bold hidden sm:block bg-gradient-to-r from-[#34d399] via-[#3b82f6] to-[#8b5cf6] bg-clip-text text-transparent">
+              <h1 className="text-2xl md:text-3xl font-bold hidden sm:block bg-gradient-to-r from-[#34d399] via-[#3b82f6] to-[#8b5cf6] bg-clip-text text-transparent">
                 Альфа-Бизнес & Digital sales
               </h1>
               
@@ -297,7 +423,7 @@ export function Layout() {
                 </div>
 
                 {/* Edit/Export Button - conditional based on page */}
-                {isActive('/goals') ? (
+                {showGoalsExport ? (
                   <button
                     onClick={handleExportGoals}
                     className="bg-white/5 hover:bg-white/10 border border-white/10 text-white px-3 py-2 rounded-xl flex items-center gap-2 transition-all shadow-xl shadow-black/20 justify-center text-sm backdrop-blur-xl"
@@ -305,16 +431,16 @@ export function Layout() {
                     <Download size={16} />
                     <span className="hidden sm:inline">Выгрузить</span>
                   </button>
-                ) : (
-                  <button
+                ) : showEditButton ? (
+                   <button
                     onClick={() => setIsEditingMode(!isEditingMode)}
                     className={`${
-                      isEditingMode ? 'bg-white/5 hover:bg-white/10 border border-white/10' : 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-600 border border-red-500/50 shadow-lg shadow-red-500/30'
-                    } text-white px-3 py-2 rounded-xl flex items-center gap-2 transition-all shadow-xl justify-center text-sm backdrop-blur-xl`}
+                      isEditingMode ? 'bg-white/5 hover:bg-white/10 border border-white/10' : 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-600 border border-red-500/50 shadow-lg shadow-red-500/30 ring-2 ring-red-500/20'
+                    } text-white px-5 py-2.5 rounded-xl flex items-center gap-2.5 transition-all shadow-xl justify-center text-sm font-bold backdrop-blur-xl hover:scale-105 active:scale-95`}
                   >
-                    {isEditingMode ? <><X size={16} /><span className="hidden sm:inline">Отменить</span></> : <><Edit3 size={16} /><span className="hidden sm:inline">Редактировать</span></>}
+                    {isEditingMode ? <><X size={18} />Отменить</> : <><Edit3 size={18} />Редактировать</>}
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
@@ -325,6 +451,97 @@ export function Layout() {
           <Outlet context={{ currentQuarter, setCurrentQuarter, currentYear, isEditingMode, setIsEditingMode }} />
         </div>
       </main>
+
+      <PasswordModal
+        isOpen={isMenuPasswordOpen}
+        onClose={() => setIsMenuPasswordOpen(false)}
+        onSuccess={() => {
+          setIsMenuPasswordOpen(false);
+          openMenuSettings();
+        }}
+      />
+
+      {isMenuModalOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleMenuCancel} />
+          <div className="relative bg-[#111319] border border-white/10 rounded-3xl w-full max-w-3xl shadow-2xl">
+            <div className="p-6 border-b border-white/10 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-white">Настройка меню</h3>
+                <p className="text-sm text-gray-400">Порядок, видимость и названия пунктов</p>
+              </div>
+              <button
+                onClick={handleMenuCancel}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-3 max-h-[60vh] overflow-y-auto">
+              {sortedMenuDraft.map((item, index, arr) => {
+                  const meta = MENU_META[item.id];
+                  const Icon = meta.icon;
+                  return (
+                    <div key={item.id} className="flex flex-col gap-3 bg-[#0a0a0a]/50 border border-white/10 rounded-2xl p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+                          <Icon size={18} className="text-gray-300" />
+                        </div>
+                        <input
+                          type="text"
+                          value={item.label}
+                          onChange={(e) => updateMenuItem(item.id, { label: e.target.value })}
+                          className="flex-1 bg-[#0a0a0a]/60 border border-gray-700/40 rounded-lg px-3 py-2 text-white text-sm"
+                        />
+                        <button
+                          onClick={() => updateMenuItem(item.id, { hidden: !item.hidden })}
+                          className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300"
+                        >
+                          {item.hidden ? <Eye size={16} /> : <EyeOff size={16} />}
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
+                        <button
+                          onClick={() => moveMenuItem(item.id, 'up')}
+                          disabled={index === 0}
+                          className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-40 flex items-center gap-1"
+                        >
+                          <ArrowUp size={14} />
+                          Выше
+                        </button>
+                        <button
+                          onClick={() => moveMenuItem(item.id, 'down')}
+                          disabled={index === arr.length - 1}
+                          className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-40 flex items-center gap-1"
+                        >
+                          <ArrowDown size={14} />
+                          Ниже
+                        </button>
+                        <span className="ml-auto">{item.hidden ? 'Скрыт' : 'Показывается'}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            <div className="p-6 border-t border-white/10 flex items-center justify-end gap-3">
+              <button
+                onClick={handleMenuCancel}
+                className="bg-white/5 hover:bg-white/10 border border-white/10 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all text-sm"
+              >
+                <X size={16} />Отменить
+              </button>
+              <button
+                onClick={handleMenuSave}
+                className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 border border-emerald-500/50 shadow-lg shadow-emerald-500/30 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all text-sm"
+              >
+                <Save size={16} />Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

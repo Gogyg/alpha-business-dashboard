@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Save, Plus, Trash2, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { useOutletContext } from 'react-router';
+import { Save, Plus, Trash2, Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react';
+import { Link, useOutletContext } from 'react-router';
 import { PasswordModal } from '../components/PasswordModal';
 import { dashboardAPI } from '../utils/api';
 
@@ -18,13 +18,33 @@ interface Metric {
   weight: string;
   fact: number;
   plan: number;
+  type?: '=' | '>=' | '<=' | '>' | '<';
+  maxPercent?: string;
   percent: string;
   isNew?: boolean;
   hasAlert?: boolean;
   runrate?: string;
 }
 
-export function Dashboard() {
+interface RedCapPageProps {
+  loadData?: (quarter: string) => Promise<any>;
+  saveData?: (quarter: string, data: any) => Promise<any>;
+  localStorageKey?: string;
+  vocTitle?: string;
+  pageTitle?: string;
+  backPath?: string;
+  getDefaultDataOverride?: (quarter: string) => any;
+}
+
+export function RedCapPage({
+  loadData: loadDataProp = dashboardAPI.get,
+  saveData: saveDataProp = dashboardAPI.save,
+  localStorageKey = 'dashboard-data',
+  vocTitle = 'VOC Канал АБ',
+  pageTitle,
+  backPath,
+  getDefaultDataOverride,
+}: RedCapPageProps) {
   const { currentQuarter, currentYear, isEditingMode, setIsEditingMode } = useOutletContext<OutletContext>();
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -39,6 +59,46 @@ export function Dashboard() {
   const [totalsConfig, setTotalsConfig] = useState<any>(getDefaultData().totalsConfig);
   const [hiddenWidgets, setHiddenWidgets] = useState<any>({});
 
+  const normalizeMetric = (metric: Metric): Metric => ({
+    ...metric,
+    type: metric.type || '=',
+    maxPercent: metric.maxPercent || '∞',
+  });
+
+  const parseMaxPercent = (value: string | undefined) => {
+    if (!value || value === '∞') return Infinity;
+    const numeric = parseFloat(value.replace(',', '.'));
+    return Number.isFinite(numeric) ? numeric : Infinity;
+  };
+
+  const formatPercent = (value: number) => `${value.toFixed(1).replace('.', ',')} %`;
+
+  const calculateMetricPercent = (metric: Metric) => {
+    const fact = parseFloat(String(metric.fact)) || 0;
+    const plan = parseFloat(String(metric.plan)) || 0;
+    if (plan <= 0 && fact <= 0) return 0;
+    if (plan <= 0) return 0;
+
+    let rawPercent = 0;
+    if (metric.type === '<=' || metric.type === '<') {
+      rawPercent = fact > 0 ? (plan / fact) * 100 : 100;
+    } else {
+      rawPercent = (fact / plan) * 100;
+    }
+    const cappedPercent = Math.min(rawPercent, parseMaxPercent(metric.maxPercent));
+    return Number.isFinite(cappedPercent) ? Math.max(cappedPercent, 0) : 0;
+  };
+
+  const syncMetric = (metric: Metric): Metric => {
+    const normalized = normalizeMetric(metric);
+    return {
+      ...normalized,
+      percent: formatPercent(calculateMetricPercent(normalized)),
+    };
+  };
+
+  const syncMetrics = (metrics: Metric[] = []) => metrics.map(syncMetric);
+
   useEffect(() => {
     if (isEditingMode && !isEditing) {
       setIsPasswordModalOpen(true);
@@ -50,26 +110,30 @@ export function Dashboard() {
   const getCurrentData = () => getDefaultData();
 
   function getDefaultData() {
+    if (getDefaultDataOverride) {
+      return getDefaultDataOverride(currentQuarter);
+    }
+
     const hasData = currentQuarter === 'Q1';
     return {
       digitalMetrics: [
-        { id: 1, name: 'Доля digital активных клиентов ЮЛ в цифровых каналах (MAU)', weight: '20 %', fact: hasData ? 89.94 : 0, plan: 90.8, percent: hasData ? '99,1 %' : '0 %' },
-        { id: 2, name: 'MAU Spotlight', weight: '20 %', fact: hasData ? 23800 : 0, plan: 21000, percent: hasData ? '113,3 %' : '0 %', isNew: true },
-        { id: 3, name: 'Объем вторичных цифровых продаж продуктов ММБ', weight: '30 %', fact: hasData ? 171780 : 0, plan: 131736, percent: hasData ? '130,4 %' : '0 %', runrate: hasData ? '149,42%' : '0%' },
-        { id: 4, name: 'Операционная прибыль от цифровых продаж СБ', weight: '30 %', fact: hasData ? 3.492 : 0, plan: 2.786, percent: hasData ? '125,3 %' : '0 %', isNew: true },
+        { id: 1, name: 'Доля digital активных клиентов ЮЛ в цифровых каналах (MAU)', weight: '20 %', fact: hasData ? 89.94 : 0, plan: 90.8, type: '=', maxPercent: '∞', percent: hasData ? '99,1 %' : '0 %' },
+        { id: 2, name: 'MAU Spotlight', weight: '20 %', fact: hasData ? 23800 : 0, plan: 21000, type: '=', maxPercent: '∞', percent: hasData ? '113,3 %' : '0 %', isNew: true },
+        { id: 3, name: 'Объем вторичных цифровых продаж продуктов ММБ', weight: '30 %', fact: hasData ? 171780 : 0, plan: 131736, type: '=', maxPercent: '∞', percent: hasData ? '130,4 %' : '0 %', runrate: hasData ? '149,42%' : '0%' },
+        { id: 4, name: 'Операционная прибыль от цифровых продаж СБ', weight: '30 %', fact: hasData ? 3.492 : 0, plan: 2.786, type: '=', maxPercent: '∞', percent: hasData ? '125,3 %' : '0 %', isNew: true },
       ],
       stabilityMetrics: [
-        { id: 1, name: 'Скорость загрузки главной страницы АБ', weight: '20 %', fact: hasData ? 2.8 : 0, plan: 4.2, percent: hasData ? '145,2 %' : '0 %' },
-        { id: 2, name: 'VOC стабильности', weight: '20 %', fact: hasData ? 0.0345 : 0, plan: 0.06, percent: hasData ? '142,5 %' : '0 %' },
-        { id: 3, name: 'Downtime канала АБ', weight: '20 %', fact: hasData ? 57 : 0, plan: 100, percent: hasData ? '100 %' : '0 %' },
-        { id: 4, name: 'SLA инцидентов в платформе продаж', weight: '20 %', fact: hasData ? 100 : 0, plan: 80, percent: hasData ? '125,0 %' : '0 %', isNew: true },
-        { id: 5, name: 'Стабильность платформы продаж (доля потерь просмотров)', weight: '20 %', fact: hasData ? 0.09 : 0, plan: 4.04, percent: hasData ? '120,0 %' : '0 %', isNew: true },
+        { id: 1, name: 'Скорость загрузки главной страницы АБ', weight: '20 %', fact: hasData ? 2.8 : 0, plan: 4.2, type: '<=', maxPercent: '∞', percent: hasData ? '145,2 %' : '0 %' },
+        { id: 2, name: 'VOC стабильности', weight: '20 %', fact: hasData ? 0.0345 : 0, plan: 0.06, type: '<=', maxPercent: '∞', percent: hasData ? '142,5 %' : '0 %' },
+        { id: 3, name: 'Downtime канала АБ', weight: '20 %', fact: hasData ? 57 : 0, plan: 100, type: '<=', maxPercent: '100', percent: hasData ? '100 %' : '0 %' },
+        { id: 4, name: 'SLA инцидентов в платформе продаж', weight: '20 %', fact: hasData ? 100 : 0, plan: 80, type: '=', maxPercent: '∞', percent: hasData ? '125,0 %' : '0 %', isNew: true },
+        { id: 5, name: 'Стабильность платформы продаж (доля потерь просмотров)', weight: '20 %', fact: hasData ? 0.09 : 0, plan: 4.04, type: '<=', maxPercent: '120', percent: hasData ? '120,0 %' : '0 %', isNew: true },
       ],
       productionMetrics: [
-        { id: 1, name: 'НКПК ЦК ЮЛ (дефекты с учетом плато)', weight: '10 %', fact: hasData ? 100 : 0, plan: 100, percent: hasData ? '100 %' : '0 %' },
-        { id: 2, name: 'Чистота ведения задач Jira', weight: '10 %', fact: hasData ? 98 : 0, plan: 100, percent: hasData ? '98 %' : '0 %' },
-        { id: 3, name: 'Сходимость КР (прогнозируемая)', weight: '50 %', fact: hasData ? 91 : 0, plan: 90, percent: hasData ? '101,1 %' : '0 %' },
-        { id: 4, name: 'Соблюдение стандартов', weight: '30 %', fact: hasData ? 85 : 0, plan: 80, percent: hasData ? '106,3 %' : '0 %', isNew: true },
+        { id: 1, name: 'НКПК ЦК ЮЛ (дефекты с учетом плато)', weight: '10 %', fact: hasData ? 100 : 0, plan: 100, type: '=', maxPercent: '∞', percent: hasData ? '100 %' : '0 %' },
+        { id: 2, name: 'Чистота ведения задач Jira', weight: '10 %', fact: hasData ? 98 : 0, plan: 100, type: '=', maxPercent: '∞', percent: hasData ? '98 %' : '0 %' },
+        { id: 3, name: 'Сходимость КР (прогнозируемая)', weight: '50 %', fact: hasData ? 91 : 0, plan: 90, type: '=', maxPercent: '∞', percent: hasData ? '101,1 %' : '0 %' },
+        { id: 4, name: 'Соблюдение стандартов', weight: '30 %', fact: hasData ? 85 : 0, plan: 80, type: '=', maxPercent: '∞', percent: hasData ? '106,3 %' : '0 %', isNew: true },
       ],
       vocData: { nib: hasData ? 4.76 : 0, mmb: hasData ? 4.76 : 0, sb: hasData ? 4.76 : 0, kib: hasData ? 4.76 : 0, range: '4.75-4.78', plan: 85 },
       enpsData: { value: hasData ? 98 : 0, plan: 85 },
@@ -89,12 +153,12 @@ export function Dashboard() {
     const loadData = async () => {
       setLoading(true);
       try {
-        const result = await dashboardAPI.get(currentQuarter);
+        const result = await loadDataProp(currentQuarter);
         const sourceData = result || getDefaultData();
         
-        setDigitalMetrics(sourceData.digitalMetrics);
-        setStabilityMetrics(sourceData.stabilityMetrics);
-        setProductionMetrics(sourceData.productionMetrics);
+        setDigitalMetrics(syncMetrics(sourceData.digitalMetrics));
+        setStabilityMetrics(syncMetrics(sourceData.stabilityMetrics));
+        setProductionMetrics(syncMetrics(sourceData.productionMetrics));
         setVocData(sourceData.vocData);
         setEnpsData(sourceData.enpsData);
         setVisibilityData(sourceData.visibilityData);
@@ -113,31 +177,24 @@ export function Dashboard() {
     if (!isEditing) return;
     try {
       setLoading(true);
-      await dashboardAPI.save(currentQuarter, {
-        digitalMetrics,
-        stabilityMetrics,
-        productionMetrics,
-        vocData,
-        enpsData,
-        visibilityData,
-        totalsConfig,
-        hiddenWidgets,
-      });
-
-      // Mirror to localStorage for Export functionality in Layout
-      const stored = localStorage.getItem('dashboard-data');
-      const allData = stored ? JSON.parse(stored) : {};
-      allData[currentQuarter] = {
-        digitalMetrics,
-        stabilityMetrics,
-        productionMetrics,
+      const payload = {
+        digitalMetrics: syncMetrics(digitalMetrics),
+        stabilityMetrics: syncMetrics(stabilityMetrics),
+        productionMetrics: syncMetrics(productionMetrics),
         vocData,
         enpsData,
         visibilityData,
         totalsConfig,
         hiddenWidgets,
       };
-      localStorage.setItem('dashboard-data', JSON.stringify(allData));
+
+      await saveDataProp(currentQuarter, payload);
+
+      // Mirror to localStorage for Export functionality in Layout
+      const stored = localStorage.getItem(localStorageKey);
+      const allData = stored ? JSON.parse(stored) : {};
+      allData[currentQuarter] = payload;
+      localStorage.setItem(localStorageKey, JSON.stringify(allData));
       setIsEditing(false);
       setIsEditingMode(false);
     } catch (err) {
@@ -152,7 +209,7 @@ export function Dashboard() {
     let totalScore = 0;
     metrics.forEach(metric => {
       const weight = parseFloat(metric.weight) / 100;
-      const percent = parseFloat(metric.percent.replace(',', '.')) / 100;
+      const percent = calculateMetricPercent(metric) / 100;
       totalWeight += weight;
       totalScore += weight * percent;
     });
@@ -193,12 +250,9 @@ export function Dashboard() {
   const handleEditMetric = (setter: any, id: number, field: string, value: any) => {
     setter((prev: Metric[]) => prev.map(metric => {
       if (metric.id === id) {
-        const updated = { ...metric, [field]: value };
-        if (field === 'fact' || field === 'plan') {
-          const numFact = parseFloat(updated.fact) || 0;
-          const numPlan = parseFloat(updated.plan) || 0;
-          const percent = numPlan > 0 ? ((numFact / numPlan) * 100).toFixed(1) : '0.0';
-          updated.percent = `${percent.replace('.', ',')} %`;
+        const updated = normalizeMetric({ ...metric, [field]: value });
+        if (field === 'fact' || field === 'plan' || field === 'type' || field === 'maxPercent') {
+          updated.percent = formatPercent(calculateMetricPercent(updated));
         }
         return updated;
       }
@@ -213,6 +267,8 @@ export function Dashboard() {
       weight: '0 %',
       fact: 0,
       plan: 0,
+      type: '=',
+      maxPercent: '∞',
       percent: '0 %'
     }]);
   };
@@ -261,14 +317,16 @@ export function Dashboard() {
                   <th className="text-left text-gray-500 text-sm pb-3">Показатель</th>
                   <th className="text-left text-gray-500 text-sm pb-3 w-24">Вес</th>
                   <th className="text-left text-gray-500 text-sm pb-3 w-32">Факт</th>
+                  {isEditing && <th className="text-left text-gray-500 text-sm pb-3 w-20">Тип</th>}
                   <th className="text-left text-gray-500 text-sm pb-3 w-32">План</th>
                   <th className="text-left text-gray-500 text-sm pb-3 w-24">%</th>
+                  {isEditing && <th className="text-left text-gray-500 text-sm pb-3 w-28">Макс%</th>}
                   {isEditing && <th className="w-12"></th>}
                 </tr>
               </thead>
               <tbody>
                 {metrics.map((metric) => {
-                  const percentValue = parseFloat(metric.percent);
+                  const percentValue = calculateMetricPercent(metric);
                   const percentColor = percentValue >= 100 ? 'text-green-400' : percentValue >= 80 ? 'text-yellow-400' : 'text-red-400';
                   
                   return (
@@ -329,6 +387,21 @@ export function Dashboard() {
                           <span className={percentColor}>{metric.fact.toLocaleString('ru-RU')}</span>
                         )}
                       </td>
+                      {isEditing && (
+                        <td className="py-4 align-top">
+                          <select
+                            value={metric.type || '='}
+                            onChange={(e) => handleEditMetric(setter, metric.id, 'type', e.target.value)}
+                            className="w-full bg-emerald-500/10 border border-emerald-500/30 rounded px-2 py-1.5 text-emerald-300"
+                          >
+                            <option value="=">=</option>
+                            <option value=">">{'>'}</option>
+                            <option value=">=">{'>='}</option>
+                            <option value="<">{'<'}</option>
+                            <option value="<=">{'<='}</option>
+                          </select>
+                        </td>
+                      )}
                       <td className="py-4 align-top">
                         {isEditing ? (
                           <input
@@ -339,10 +412,21 @@ export function Dashboard() {
                             className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-1.5 text-white"
                           />
                         ) : (
-                          <span className="text-gray-400">{metric.plan.toLocaleString('ru-RU')}</span>
+                          <span className="text-gray-400">{`${metric.type || '='} ${metric.plan.toLocaleString('ru-RU')}`}</span>
                         )}
                       </td>
-                      <td className={`py-4 font-semibold align-top ${percentColor}`}>{metric.percent}</td>
+                      <td className={`py-4 font-semibold align-top ${percentColor}`}>{formatPercent(percentValue)}</td>
+                      {isEditing && (
+                        <td className="py-4 align-top">
+                          <input
+                            type="text"
+                            value={metric.maxPercent || '∞'}
+                            onChange={(e) => handleEditMetric(setter, metric.id, 'maxPercent', e.target.value)}
+                            className="w-full bg-[#0a0a0a]/50 border border-amber-500/30 rounded px-3 py-1.5 text-amber-300"
+                            placeholder="∞"
+                          />
+                        </td>
+                      )}
                       {isEditing && (
                         <td className="py-4 align-top">
                           <button
@@ -363,7 +447,7 @@ export function Dashboard() {
           {/* Mobile Cards */}
           <div className="block md:hidden space-y-4">
             {metrics.map((metric) => {
-              const percentValue = parseFloat(metric.percent);
+              const percentValue = calculateMetricPercent(metric);
               const percentColor = percentValue >= 100 ? 'text-green-400' : percentValue >= 80 ? 'text-yellow-400' : 'text-red-400';
               
               return (
@@ -432,7 +516,31 @@ export function Dashboard() {
                       </div>
                       <div>
                         <span className="text-gray-500 text-xs">%</span>
-                        <div className={`font-semibold ${percentColor} px-2 py-1`}>{metric.percent}</div>
+                        <div className={`font-semibold ${percentColor} px-2 py-1`}>{formatPercent(percentValue)}</div>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 text-xs">Тип</span>
+                        <select
+                          value={metric.type || '='}
+                          onChange={(e) => handleEditMetric(setter, metric.id, 'type', e.target.value)}
+                          className="w-full bg-emerald-500/10 border border-emerald-500/30 rounded px-2 py-1 text-emerald-300"
+                        >
+                          <option value="=">=</option>
+                          <option value=">">{'>'}</option>
+                          <option value=">=">{'>='}</option>
+                          <option value="<">{'<'}</option>
+                          <option value="<=">{'<='}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 text-xs">Макс%</span>
+                        <input
+                          type="text"
+                          value={metric.maxPercent || '∞'}
+                          onChange={(e) => handleEditMetric(setter, metric.id, 'maxPercent', e.target.value)}
+                          className="w-full bg-[#0a0a0a]/50 border border-amber-500/30 rounded px-2 py-1 text-amber-300"
+                          placeholder="∞"
+                        />
                       </div>
                       {metric.runrate && (
                         <div className="col-span-2">
@@ -447,9 +555,12 @@ export function Dashboard() {
                       )}
                     </div>
                   ) : (
-                    <div className="text-center mt-3">
+                    <div className="text-center mt-3 space-y-2">
                       <div className={`text-4xl font-bold ${percentColor}`}>
                         {metric.fact.toLocaleString('ru-RU')}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        План: {metric.type || '='} {metric.plan.toLocaleString('ru-RU')}
                       </div>
                     </div>
                   )}
@@ -473,6 +584,28 @@ export function Dashboard() {
   return (
     <div className="p-8 pt-4 min-h-screen">
       <div className="max-w-5xl mx-auto">
+        {(pageTitle || backPath) && (
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              {backPath && (
+                <Link
+                  to={backPath}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-white/10"
+                >
+                  <ArrowLeft size={16} />
+                  Назад
+                </Link>
+              )}
+              {pageTitle && (
+                <div>
+                  <div className="text-xs uppercase tracking-[0.18em] text-gray-500">КШ CDPO</div>
+                  <h2 className="text-3xl font-bold text-white">{pageTitle}</h2>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="space-y-6">
           {renderMetricsTable('SCORE-КАРТА', digitalMetrics, setDigitalMetrics, 'scoreCard')}
           {renderMetricsTable('СТАБИЛЬНОСТЬ/ПРОЕКТЫ', stabilityMetrics, setStabilityMetrics, 'stability')}
@@ -489,7 +622,7 @@ export function Dashboard() {
                 </button>
               )}
               <div className={`${hiddenWidgets.voc ? 'opacity-40 blur-[2px] pointer-events-none' : ''} transition-all flex flex-col flex-1`}>
-                <h3 className="text-xl font-bold text-white mb-4 pr-10">VOC Канал АБ</h3>
+                <h3 className="text-xl font-bold text-white mb-4 pr-10">{vocTitle}</h3>
                 
                 {/* Main НИБ Value */}
                 <div className="mb-6 flex flex-col items-start">
@@ -658,4 +791,8 @@ export function Dashboard() {
       />
     </div>
   );
+}
+
+export function Dashboard() {
+  return <RedCapPage />;
 }
