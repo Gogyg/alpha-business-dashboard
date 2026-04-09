@@ -120,81 +120,85 @@ export function KshCdpoPage() {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
-        <div>
-          <h1 className="text-4xl font-bold text-white mb-2">КШ CDPO</h1>
-          <p className="text-gray-400 text-lg">
-            Выберите дашборд для просмотра и настройки показателей
-          </p>
+    <div className="p-4 md:p-8 pt-4 min-h-screen">
+      <div className="max-w-5xl mx-auto space-y-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-2">КШ CDPO</h1>
+            <p className="text-gray-400 text-lg">
+              Выберите дашборд для просмотра и настройки показателей
+            </p>
+          </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {dashboards.map((dashboard) => (
-          <div key={dashboard.id} className="relative group">
-            {isEditing ? (
-              <div className={`${isEditing ? 'h-[320px] justify-start pt-8' : 'h-[200px] justify-between py-4'} w-full transition-all bg-white/[0.03] border-white/10 rounded-3xl px-6 flex flex-col items-center text-center overflow-hidden relative`}>
-                <CardHeader className="w-full p-0">
-                  <div className="space-y-4 w-full">
-                    <div className="bg-gradient-to-r from-[#34d399] to-[#3b82f6] bg-clip-text text-transparent text-[10px] font-bold uppercase tracking-widest mb-1">Заголовок</div>
-                    <input 
-                      value={dashboard.title} 
-                      onChange={(e) => handleEditDashboard(dashboard.id, 'title', e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-xl font-bold text-center focus:border-[#34d399] outline-none transition-all"
-                    />
-                  </div>
-                </CardHeader>
-                <CardContent className="w-full p-0 mt-6 h-auto relative z-20">
-                  <div className="space-y-4 w-full">
-                    <div className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-1">Описание</div>
-                    <textarea 
-                      value={dashboard.description} 
-                      onChange={(e) => handleEditDashboard(dashboard.id, 'description', e.target.value)}
-                      rows={2}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-gray-400 text-sm text-center focus:border-white/30 outline-none transition-all resize-none overflow-hidden"
-                    />
-                  </div>
-                </CardContent>
-                <button 
-                  onClick={() => setDeleteTarget({ id: dashboard.id, title: dashboard.title })}
-                  className="absolute top-4 right-4 p-2.5 text-red-500 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl transition-all z-[100] shadow-[0_0_15px_rgba(239,68,68,0.2)]"
-                >
-                  <Trash2 size={22} />
-                </button>
-              </div>
-            ) : (
-              <Link to={`/ksh-cdpo/${dashboard.id}`}>
-                <Card className="h-[200px] justify-between py-5 w-full transition-all bg-white/[0.03] border-white/10 hover:bg-white/[0.05] hover:border-white/20 rounded-3xl px-6 flex flex-col items-center text-center overflow-hidden relative">
-                  <CardHeader className="w-full flex-1 flex flex-col items-center justify-center p-0 pt-2">
-                    <div className="flex-1 flex items-center justify-center pt-4">
-                      <CardTitle className="text-2xl font-bold bg-gradient-to-r from-[#34d399] via-[#3b82f6] to-[#8b5cf6] bg-clip-text text-transparent leading-tight max-w-full pointer-events-none line-clamp-3">
-                        {dashboard.title}
-                      </CardTitle>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {dashboards.map((dashboard) => (
+            <div key={dashboard.id} className="relative group">
+              {isEditing ? (
+                <div className="h-[320px] w-full transition-all bg-white/[0.03] border border-white/10 rounded-3xl px-6 pt-8 flex flex-col items-center text-center overflow-hidden relative">
+                  <CardHeader className="w-full p-0">
+                    <div className="space-y-4 w-full">
+                      <div className="bg-gradient-to-r from-[#34d399] to-[#3b82f6] bg-clip-text text-transparent text-[10px] font-bold uppercase tracking-widest mb-1">Заголовок</div>
+                      <input 
+                        value={dashboard.title} 
+                        onChange={(e) => handleEditDashboard(dashboard.id, 'title', e.target.value)}
+                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-xl font-bold text-center focus:border-[#34d399] outline-none transition-all"
+                      />
                     </div>
                   </CardHeader>
-                  <CardContent className="w-full p-0 flex flex-col justify-end h-[100px] relative z-20">
-                    <p className="text-white font-medium text-lg leading-relaxed line-clamp-2 px-6 pb-10 flex items-center justify-center h-full">
-                      {dashboard.description}
-                    </p>
+                  <CardContent className="w-full p-0 mt-6 h-auto relative z-20">
+                    <div className="space-y-4 w-full">
+                      <div className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-1">Описание</div>
+                      <textarea 
+                        value={dashboard.description} 
+                        onChange={(e) => handleEditDashboard(dashboard.id, 'description', e.target.value)}
+                        rows={2}
+                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-gray-400 text-sm text-center focus:border-white/30 outline-none transition-all resize-none overflow-hidden"
+                      />
+                    </div>
                   </CardContent>
-                </Card>
-              </Link>
-            )}
-          </div>
-        ))}
-
-        {isEditing && (
-          <Card 
-            onClick={createNewDashboard}
-            className="h-[320px] w-full border-dashed border-white/10 bg-transparent hover:bg-white/[0.02] hover:border-[#34d399]/30 transition-all cursor-pointer rounded-3xl flex flex-col items-center justify-center gap-4 group"
-          >
-            <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center group-hover:bg-[#34d399]/10 transition-colors">
-              <Plus className="text-gray-500 group-hover:text-[#34d399] transition-colors" />
+                  <button 
+                    onClick={() => setDeleteTarget({ id: dashboard.id, title: dashboard.title })}
+                    className="absolute top-4 right-4 p-2.5 text-red-500 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl transition-all z-[100] shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                  >
+                    <Trash2 size={22} />
+                  </button>
+                </div>
+              ) : (
+                <Link to={`/ksh-cdpo/${dashboard.id}`}>
+                  <Card className="h-[220px] w-full transition-all bg-white/[0.03] border border-white/10 hover:bg-white/[0.05] hover:border-white/20 rounded-3xl px-7 py-7 flex flex-col justify-between text-center overflow-hidden relative">
+                    <CardHeader className="w-full p-0">
+                      <div className="min-h-[82px] flex items-center justify-center">
+                        <CardTitle className="text-[19px] md:text-[21px] font-bold bg-gradient-to-r from-[#34d399] via-[#3b82f6] to-[#8b5cf6] bg-clip-text text-transparent leading-snug break-words whitespace-normal line-clamp-2">
+                          {dashboard.title}
+                        </CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="w-full p-0">
+                      <div className="min-h-[54px] flex items-start justify-center">
+                        <p className="text-white/85 font-medium text-lg leading-snug break-words whitespace-normal line-clamp-2">
+                          {dashboard.description?.trim() || 'Добавьте краткое описание раздела'}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              )}
             </div>
-            <span className="text-gray-500 group-hover:text-gray-300 transition-colors font-medium">Добавить раздел</span>
-          </Card>
-        )}
+          ))}
+
+          {isEditing && (
+            <Card 
+              onClick={createNewDashboard}
+              className="h-[320px] w-full border border-dashed border-white/10 bg-transparent hover:bg-white/[0.02] hover:border-[#34d399]/30 transition-all cursor-pointer rounded-3xl flex flex-col items-center justify-center gap-4 group"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center group-hover:bg-[#34d399]/10 transition-colors">
+                <Plus className="text-gray-500 group-hover:text-[#34d399] transition-colors" />
+              </div>
+              <span className="text-gray-500 group-hover:text-gray-300 transition-colors font-medium">Добавить раздел</span>
+            </Card>
+          )}
+        </div>
       </div>
 
       {isEditing && (

@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
-import { BarChart3, Target, ChevronLeft, ChevronRight, Edit3, X, Goal, Download, LogOut, CalendarDays, Settings, EyeOff, Eye, ArrowUp, ArrowDown, Save, TrendingUp } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { BarChart3, Target, ChevronLeft, ChevronRight, Edit3, X, Goal, Download, LogOut, CalendarDays, Settings, EyeOff, Eye, Save, TrendingUp, GripVertical } from 'lucide-react';
+import { useEffect, useMemo, useState, type DragEvent } from 'react';
 import logoImage from '../../assets/5b6ead3363f3911c8fbce32735c6a3c819462945.png';
 import * as XLSX from 'xlsx';
 import { authAPI, getCurrentUser, goalsAPI, menuAPI } from '../utils/api';
@@ -40,8 +40,13 @@ export function Layout() {
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [menuConfig, setMenuConfig] = useState<MenuItemConfig[]>(DEFAULT_MENU);
   const [menuDraft, setMenuDraft] = useState<MenuItemConfig[]>([]);
-  const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
+  const [isMenuSettingsMode, setIsMenuSettingsMode] = useState(false);
   const [isMenuPasswordOpen, setIsMenuPasswordOpen] = useState(false);
+  const [draggedMenuItemId, setDraggedMenuItemId] = useState<MenuItemConfig['id'] | null>(null);
+  const [dragOverMenuItem, setDragOverMenuItem] = useState<{
+    id: MenuItemConfig['id'];
+    position: 'before' | 'after';
+  } | null>(null);
   const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
   const currentUser = getCurrentUser();
 
@@ -95,7 +100,7 @@ export function Layout() {
 
   const openMenuSettings = () => {
     setMenuDraft([...menuConfig].sort((a, b) => a.order - b.order));
-    setIsMenuModalOpen(true);
+    setIsMenuSettingsMode(true);
   };
 
   const handleMenuSave = async () => {
@@ -106,15 +111,45 @@ export function Layout() {
       }));
       setMenuConfig(normalized);
       await menuAPI.save({ items: normalized });
-      setIsMenuModalOpen(false);
+      setIsMenuSettingsMode(false);
     } catch (err) {
       alert('Ошибка при сохранении меню: ' + (err as any).message);
     }
   };
 
   const handleMenuCancel = () => {
-    setIsMenuModalOpen(false);
+    setIsMenuSettingsMode(false);
     setMenuDraft([]);
+    setDraggedMenuItemId(null);
+    setDragOverMenuItem(null);
+  };
+
+  const reorderMenuDraft = (
+    sourceId: MenuItemConfig['id'],
+    targetId: MenuItemConfig['id'],
+    position: 'before' | 'after',
+  ) => {
+    setMenuDraft((prev) => {
+      const sorted = [...prev].sort((a, b) => a.order - b.order);
+      const sourceIndex = sorted.findIndex((item) => item.id === sourceId);
+      const targetIndex = sorted.findIndex((item) => item.id === targetId);
+
+      if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
+        return prev;
+      }
+
+      const next = [...sorted];
+      const [movedItem] = next.splice(sourceIndex, 1);
+      const adjustedTargetIndex = next.findIndex((item) => item.id === targetId);
+      const insertIndex = position === 'before' ? adjustedTargetIndex : adjustedTargetIndex + 1;
+
+      next.splice(insertIndex, 0, movedItem);
+
+      return next.map((item, index) => ({
+        ...item,
+        order: index + 1,
+      }));
+    });
   };
 
   const moveMenuItem = (id: MenuItemConfig['id'], direction: 'up' | 'down') => {
@@ -134,6 +169,43 @@ export function Layout() {
 
   const updateMenuItem = (id: MenuItemConfig['id'], updates: Partial<MenuItemConfig>) => {
     setMenuDraft((prev) => prev.map((item) => (item.id === id ? { ...item, ...updates } : item)));
+  };
+
+  const handleMenuDragStart = (id: MenuItemConfig['id']) => {
+    setDraggedMenuItemId(id);
+  };
+
+  const handleMenuDragOver = (
+    event: DragEvent<HTMLDivElement>,
+    id: MenuItemConfig['id'],
+  ) => {
+    event.preventDefault();
+    if (!draggedMenuItemId || draggedMenuItemId === id) {
+      setDragOverMenuItem(null);
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    const position = event.clientY < midpoint ? 'before' : 'after';
+
+    setDragOverMenuItem({ id, position });
+  };
+
+  const handleMenuDrop = (id: MenuItemConfig['id']) => {
+    if (!draggedMenuItemId || draggedMenuItemId === id) return;
+
+    const position =
+      dragOverMenuItem?.id === id ? dragOverMenuItem.position : 'after';
+
+    reorderMenuDraft(draggedMenuItemId, id, position);
+    setDraggedMenuItemId(null);
+    setDragOverMenuItem(null);
+  };
+
+  const handleMenuDragEnd = () => {
+    setDraggedMenuItemId(null);
+    setDragOverMenuItem(null);
   };
 
   const handleLogout = () => {
@@ -306,7 +378,7 @@ export function Layout() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a0a0f] via-[#0f0f14] to-[#0a0a0f] flex flex-col md:flex-row">
       {/* Sidebar */}
-      <aside className="w-full md:w-64 flex flex-col border-b md:border-r md:border-b-0 border-white/5 shrink-0 bg-gradient-to-b from-[#0f0f14] via-[#0a0a0f] to-[#0a0a0f]">
+      <aside className={`w-full flex flex-col border-b md:border-r md:border-b-0 border-white/5 shrink-0 bg-gradient-to-b from-[#0f0f14] via-[#0a0a0f] to-[#0a0a0f] transition-[width] duration-300 ${isMenuSettingsMode ? 'md:w-[22rem]' : 'md:w-64'}`}>
         {/* Logo */}
         <div className="p-4 md:p-6 border-b border-white/5 flex justify-between items-center md:block">
           <div className="flex items-center gap-3">
@@ -334,7 +406,104 @@ export function Layout() {
 
         {/* Navigation - Desktop */}
         <nav className="hidden md:flex flex-1 p-4 flex-col">
-          {visibleMenu.map((item) => {
+          {isMenuSettingsMode ? (
+            <>
+              <div className="px-2 pb-3">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <div>
+                    <div className="text-white font-semibold">Настройка меню</div>
+                    <div className="text-xs text-gray-500">Перетаскивайте пункты, скрывайте лишнее и меняйте названия</div>
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={handleMenuCancel}
+                    className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all text-sm"
+                  >
+                    <X size={16} />
+                    Отмена
+                  </button>
+                  <button
+                    onClick={handleMenuSave}
+                    className="flex-1 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 border border-emerald-500/50 shadow-lg shadow-emerald-500/20 text-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all text-sm"
+                  >
+                    <Save size={16} />
+                    Сохранить
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {sortedMenuDraft.map((item) => {
+                  const meta = MENU_META[item.id];
+                  const Icon = meta.icon;
+                  const isDragged = draggedMenuItemId === item.id;
+                  const isDropTarget = dragOverMenuItem?.id === item.id;
+
+                  return (
+                    <div
+                      key={item.id}
+                      draggable
+                      onDragStart={() => handleMenuDragStart(item.id)}
+                      onDragOver={(event) => handleMenuDragOver(event, item.id)}
+                      onDrop={() => handleMenuDrop(item.id)}
+                      onDragEnd={handleMenuDragEnd}
+                      className={`rounded-2xl border bg-[#0a0a0a]/50 p-3 transition-all ${
+                        isDragged
+                          ? 'opacity-50 border-emerald-500/40'
+                          : isDropTarget
+                            ? dragOverMenuItem?.position === 'before'
+                              ? 'border-white/20 shadow-[inset_0_3px_0_rgba(52,211,153,0.9)]'
+                              : 'border-white/20 shadow-[inset_0_-3px_0_rgba(52,211,153,0.9)]'
+                            : item.hidden
+                              ? 'border-white/5 opacity-60'
+                              : 'border-white/10'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 cursor-grab active:cursor-grabbing shrink-0"
+                          title="Перетащить пункт меню"
+                        >
+                          <GripVertical size={16} />
+                        </button>
+                        <div className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                          <Icon size={18} className="text-gray-300" />
+                        </div>
+                        <input
+                          type="text"
+                          value={item.label}
+                          onChange={(e) => updateMenuItem(item.id, { label: e.target.value })}
+                          className="flex-1 min-w-0 bg-[#0a0a0a]/70 border border-gray-700/40 rounded-xl px-3 py-2 text-white text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => updateMenuItem(item.id, { hidden: !item.hidden })}
+                          className={`p-2 rounded-xl border shrink-0 transition-all ${
+                            item.hidden
+                              ? 'bg-white/5 border-white/10 text-gray-500'
+                              : 'bg-white/10 border-white/15 text-white'
+                          }`}
+                          title={item.hidden ? 'Показать пункт' : 'Скрыть пункт'}
+                        >
+                          {item.hidden ? <Eye size={16} /> : <EyeOff size={16} />}
+                        </button>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between gap-3 pl-[3.5rem] text-xs">
+                        <span className="text-gray-500">Перетащите для смены порядка</span>
+                        <span className={item.hidden ? 'text-amber-300/80' : 'text-emerald-300/80'}>
+                          {item.hidden ? 'Скрыт' : 'Показывается'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex-1" />
+            </>
+          ) : visibleMenu.map((item) => {
             const meta = MENU_META[item.id];
             const Icon = meta.icon;
             return (
@@ -356,14 +525,16 @@ export function Layout() {
           {/* Spacer */}
           <div className="flex-1"></div>
 
-          <button
-            onClick={() => setIsMenuPasswordOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:text-white text-sm transition-all opacity-60 hover:opacity-100"
-            title="Настроить меню"
-          >
-            <Settings size={16} />
-            <span className="sr-only">Настроить меню</span>
-          </button>
+          {!isMenuSettingsMode && (
+            <button
+              onClick={() => setIsMenuPasswordOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:text-white text-sm transition-all opacity-60 hover:opacity-100"
+              title="Настроить меню"
+            >
+              <Settings size={16} />
+              <span className="sr-only">Настроить меню</span>
+            </button>
+          )}
 
           {/* User Info & Logout */}
           <div className="border-t border-white/10 pt-4 mt-4">
@@ -460,88 +631,6 @@ export function Layout() {
           openMenuSettings();
         }}
       />
-
-      {isMenuModalOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleMenuCancel} />
-          <div className="relative bg-[#111319] border border-white/10 rounded-3xl w-full max-w-3xl shadow-2xl">
-            <div className="p-6 border-b border-white/10 flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-bold text-white">Настройка меню</h3>
-                <p className="text-sm text-gray-400">Порядок, видимость и названия пунктов</p>
-              </div>
-              <button
-                onClick={handleMenuCancel}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-3 max-h-[60vh] overflow-y-auto">
-              {sortedMenuDraft.map((item, index, arr) => {
-                  const meta = MENU_META[item.id];
-                  const Icon = meta.icon;
-                  return (
-                    <div key={item.id} className="flex flex-col gap-3 bg-[#0a0a0a]/50 border border-white/10 rounded-2xl p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
-                          <Icon size={18} className="text-gray-300" />
-                        </div>
-                        <input
-                          type="text"
-                          value={item.label}
-                          onChange={(e) => updateMenuItem(item.id, { label: e.target.value })}
-                          className="flex-1 bg-[#0a0a0a]/60 border border-gray-700/40 rounded-lg px-3 py-2 text-white text-sm"
-                        />
-                        <button
-                          onClick={() => updateMenuItem(item.id, { hidden: !item.hidden })}
-                          className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300"
-                        >
-                          {item.hidden ? <Eye size={16} /> : <EyeOff size={16} />}
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-gray-400">
-                        <button
-                          onClick={() => moveMenuItem(item.id, 'up')}
-                          disabled={index === 0}
-                          className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-40 flex items-center gap-1"
-                        >
-                          <ArrowUp size={14} />
-                          Выше
-                        </button>
-                        <button
-                          onClick={() => moveMenuItem(item.id, 'down')}
-                          disabled={index === arr.length - 1}
-                          className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-40 flex items-center gap-1"
-                        >
-                          <ArrowDown size={14} />
-                          Ниже
-                        </button>
-                        <span className="ml-auto">{item.hidden ? 'Скрыт' : 'Показывается'}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-
-            <div className="p-6 border-t border-white/10 flex items-center justify-end gap-3">
-              <button
-                onClick={handleMenuCancel}
-                className="bg-white/5 hover:bg-white/10 border border-white/10 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all text-sm"
-              >
-                <X size={16} />Отменить
-              </button>
-              <button
-                onClick={handleMenuSave}
-                className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 border border-emerald-500/50 shadow-lg shadow-emerald-500/30 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all text-sm"
-              >
-                <Save size={16} />Сохранить
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

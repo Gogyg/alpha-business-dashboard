@@ -169,7 +169,11 @@ export const kshCdpoAPI = {
   createDashboard: async (title: string, description: string) => {
     const { error } = await supabase
       .from('ksh_cdpo_dashboards')
-      .insert({ title, description });
+      .insert({
+        id: crypto.randomUUID(),
+        title,
+        description,
+      });
     if (error) throw new Error(error.message);
     return { success: true };
   },
