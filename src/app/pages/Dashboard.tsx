@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Plus, Trash2, Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react';
+import { Save, Plus, Trash2, Eye, EyeOff, Loader2, ArrowLeft, X, RotateCcw } from 'lucide-react';
 import { Link, useOutletContext } from 'react-router';
 import { PasswordModal } from '../components/PasswordModal';
 import { dashboardAPI } from '../utils/api';
@@ -36,6 +36,29 @@ interface RedCapPageProps {
   getDefaultDataOverride?: (quarter: string) => any;
 }
 
+interface VocItem {
+  id: string;
+  label: string;
+  value: number;
+}
+
+interface VocData {
+  nib: number;
+  range: string;
+  plan: number;
+  items: VocItem[];
+}
+
+interface WidgetTitles {
+  scoreCard: string;
+  stability: string;
+  production: string;
+  voc: string;
+  enps: string;
+  visibility: string;
+  totals: string;
+}
+
 export function RedCapPage({
   loadData: loadDataProp = dashboardAPI.get,
   saveData: saveDataProp = dashboardAPI.save,
@@ -53,11 +76,23 @@ export function RedCapPage({
   const [digitalMetrics, setDigitalMetrics] = useState<Metric[]>([]);
   const [stabilityMetrics, setStabilityMetrics] = useState<Metric[]>([]);
   const [productionMetrics, setProductionMetrics] = useState<Metric[]>([]);
-  const [vocData, setVocData] = useState<any>({});
+  const [vocData, setVocData] = useState<VocData>({ nib: 0, range: '0-0', plan: 85, items: [] });
   const [enpsData, setEnpsData] = useState<any>({});
   const [visibilityData, setVisibilityData] = useState<any>({});
   const [totalsConfig, setTotalsConfig] = useState<any>(getDefaultData().totalsConfig);
   const [hiddenWidgets, setHiddenWidgets] = useState<any>({});
+  const [deletedWidgets, setDeletedWidgets] = useState<any>({});
+  const [purgedWidgets, setPurgedWidgets] = useState<any>({});
+  const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
+  const [widgetTitles, setWidgetTitles] = useState<WidgetTitles>({
+    scoreCard: 'SCORE-КАРТА',
+    stability: 'СТАБИЛЬНОСТЬ/ПРОЕКТЫ',
+    production: 'ПРОИЗВОДСТВО',
+    voc: vocTitle,
+    enps: 'eNPS',
+    visibility: 'visibility',
+    totals: 'Итоговые показатели красной шапочки',
+  });
 
   const normalizeMetric = (metric: Metric): Metric => ({
     ...metric,
@@ -99,6 +134,44 @@ export function RedCapPage({
 
   const syncMetrics = (metrics: Metric[] = []) => metrics.map(syncMetric);
 
+  const normalizeVocData = (raw: any): VocData => {
+    const nib = Number.isFinite(Number(raw?.nib)) ? Number(raw.nib) : 0;
+    const range = typeof raw?.range === 'string' ? raw.range : '0-0';
+    const plan = Number.isFinite(Number(raw?.plan)) ? Number(raw.plan) : 85;
+
+    const normalizedItems = Array.isArray(raw?.items)
+      ? raw.items.slice(0, 5).map((item: any, index: number) => ({
+          id: String(item?.id || `voc-item-${index + 1}`),
+          label: typeof item?.label === 'string' && item.label.trim() ? item.label : `Строка ${index + 1}`,
+          value: Number.isFinite(Number(item?.value)) ? Number(item.value) : 0,
+        }))
+      : null;
+
+    if (normalizedItems && normalizedItems.length > 0) {
+      return { nib, range, plan, items: normalizedItems };
+    }
+
+    const legacyItems: VocItem[] = [
+      { id: 'voc-mmb', label: 'ММБ', value: Number.isFinite(Number(raw?.mmb)) ? Number(raw.mmb) : 0 },
+      { id: 'voc-sb', label: 'СБ', value: Number.isFinite(Number(raw?.sb)) ? Number(raw.sb) : 0 },
+      { id: 'voc-kib', label: 'КИБ', value: Number.isFinite(Number(raw?.kib)) ? Number(raw.kib) : 0 },
+    ];
+
+    return { nib, range, plan, items: legacyItems };
+  };
+
+  function getDefaultWidgetTitles(): WidgetTitles {
+    return {
+    scoreCard: 'SCORE-КАРТА',
+    stability: 'СТАБИЛЬНОСТЬ/ПРОЕКТЫ',
+    production: 'ПРОИЗВОДСТВО',
+    voc: vocTitle,
+    enps: 'eNPS',
+    visibility: 'visibility',
+    totals: 'Итоговые показатели красной шапочки',
+    };
+  }
+
   useEffect(() => {
     if (isEditingMode && !isEditing) {
       setIsPasswordModalOpen(true);
@@ -135,7 +208,16 @@ export function RedCapPage({
         { id: 3, name: 'Сходимость КР (прогнозируемая)', weight: '50 %', fact: hasData ? 91 : 0, plan: 90, type: '=', maxPercent: '∞', percent: hasData ? '101,1 %' : '0 %' },
         { id: 4, name: 'Соблюдение стандартов', weight: '30 %', fact: hasData ? 85 : 0, plan: 80, type: '=', maxPercent: '∞', percent: hasData ? '106,3 %' : '0 %', isNew: true },
       ],
-      vocData: { nib: hasData ? 4.76 : 0, mmb: hasData ? 4.76 : 0, sb: hasData ? 4.76 : 0, kib: hasData ? 4.76 : 0, range: '4.75-4.78', plan: 85 },
+      vocData: {
+        nib: hasData ? 4.76 : 0,
+        range: '4.75-4.78',
+        plan: 85,
+        items: [
+          { id: 'voc-mmb', label: 'ММБ', value: hasData ? 4.76 : 0 },
+          { id: 'voc-sb', label: 'СБ', value: hasData ? 4.76 : 0 },
+          { id: 'voc-kib', label: 'КИБ', value: hasData ? 4.76 : 0 },
+        ],
+      },
       enpsData: { value: hasData ? 98 : 0, plan: 85 },
       visibilityData: { value: hasData ? 890 : 0, plan: 358 },
       totalsConfig: hasData ? {
@@ -145,7 +227,10 @@ export function RedCapPage({
         weights: { scoreCard: 30, stability: 20, production: 20, voc: 20, personnel: 10 },
         overrides: { scoreCard: '', stability: '', production: '', voc: '', personnel: '100', total: '' }
       },
+      widgetTitles: getDefaultWidgetTitles(),
       hiddenWidgets: {},
+      deletedWidgets: {},
+      purgedWidgets: {},
     };
   }
 
@@ -159,11 +244,14 @@ export function RedCapPage({
         setDigitalMetrics(syncMetrics(sourceData.digitalMetrics));
         setStabilityMetrics(syncMetrics(sourceData.stabilityMetrics));
         setProductionMetrics(syncMetrics(sourceData.productionMetrics));
-        setVocData(sourceData.vocData);
+        setVocData(normalizeVocData(sourceData.vocData));
         setEnpsData(sourceData.enpsData);
         setVisibilityData(sourceData.visibilityData);
         setTotalsConfig(sourceData.totalsConfig || getDefaultData().totalsConfig);
+        setWidgetTitles({ ...getDefaultWidgetTitles(), ...(sourceData.widgetTitles || {}) });
         setHiddenWidgets(sourceData.hiddenWidgets || {});
+        setDeletedWidgets(sourceData.deletedWidgets || {});
+        setPurgedWidgets(sourceData.purgedWidgets || {});
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
       } finally {
@@ -185,7 +273,10 @@ export function RedCapPage({
         enpsData,
         visibilityData,
         totalsConfig,
+        widgetTitles,
         hiddenWidgets,
+        deletedWidgets,
+        purgedWidgets,
       };
 
       await saveDataProp(currentQuarter, payload);
@@ -277,6 +368,38 @@ export function RedCapPage({
     setter((prev: Metric[]) => prev.filter(m => m.id !== id));
   };
 
+  const addVocItem = () => {
+    setVocData((prev) => {
+      const items = Array.isArray(prev.items) ? prev.items : [];
+      if (items.length >= 5) return prev;
+      return {
+        ...prev,
+        items: [
+          ...items,
+          {
+            id: `voc-item-${Date.now()}`,
+            label: `Строка ${items.length + 1}`,
+            value: 0,
+          },
+        ],
+      };
+    });
+  };
+
+  const updateVocItem = (id: string, patch: Partial<VocItem>) => {
+    setVocData((prev) => ({
+      ...prev,
+      items: (prev.items || []).map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    }));
+  };
+
+  const deleteVocItem = (id: string) => {
+    setVocData((prev) => ({
+      ...prev,
+      items: (prev.items || []).filter((item) => item.id !== id),
+    }));
+  };
+
   const toggleWidgetVisibility = (widgetName: string) => {
     setHiddenWidgets((prev: any) => ({
       ...prev,
@@ -284,8 +407,61 @@ export function RedCapPage({
     }));
   };
 
-  const renderMetricsTable = (title: string, metrics: Metric[], setter: any, widgetKey: string) => {
+  const deleteWidget = (widgetName: string, widgetLabel: string) => {
+    const confirmed = window.confirm(`Удалить виджет "${widgetLabel}"?`);
+    if (!confirmed) return;
+    setDeletedWidgets((prev: any) => ({
+      ...prev,
+      [widgetName]: true,
+    }));
+    setHiddenWidgets((prev: any) => ({
+      ...prev,
+      [widgetName]: false,
+    }));
+  };
+
+  const restoreWidget = (widgetName: string) => {
+    setDeletedWidgets((prev: any) => ({
+      ...prev,
+      [widgetName]: false,
+    }));
+    setPurgedWidgets((prev: any) => ({
+      ...prev,
+      [widgetName]: false,
+    }));
+  };
+
+  const purgeWidget = (widgetName: string) => {
+    const confirmed = window.confirm('Удалить окончательно? Виджет исчезнет из корзины и восстановить его будет нельзя.');
+    if (!confirmed) return;
+    setDeletedWidgets((prev: any) => ({
+      ...prev,
+      [widgetName]: false,
+    }));
+    setPurgedWidgets((prev: any) => ({
+      ...prev,
+      [widgetName]: true,
+    }));
+  };
+
+  const widgetCatalog = [
+    { key: 'scoreCard', title: widgetTitles.scoreCard },
+    { key: 'stability', title: widgetTitles.stability },
+    { key: 'production', title: widgetTitles.production },
+    { key: 'voc', title: widgetTitles.voc },
+    { key: 'enps', title: widgetTitles.enps },
+    { key: 'visibility', title: widgetTitles.visibility },
+    { key: 'totals', title: widgetTitles.totals },
+  ];
+
+  const deletedWidgetList = widgetCatalog.filter((widget) => deletedWidgets[widget.key] && !purgedWidgets[widget.key]);
+
+  const renderMetricsTable = (titleKey: keyof WidgetTitles, metrics: Metric[], setter: any, widgetKey: string) => {
     const isHidden = hiddenWidgets[widgetKey];
+    const isDeleted = deletedWidgets[widgetKey];
+    const isPurged = purgedWidgets[widgetKey];
+    const title = widgetTitles[titleKey];
+    if (isDeleted || isPurged) return null;
     
     return (
       <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl shadow-black/20 relative flex flex-col">
@@ -298,15 +474,27 @@ export function RedCapPage({
               {isHidden ? <Eye size={16} className="text-white" /> : <EyeOff size={16} className="text-gray-400" />}
             </button>
             <button
-              onClick={() => addMetric(setter)}
-              className="p-2 bg-emerald-500/20 hover:bg-emerald-500/30 rounded-xl transition-all border border-emerald-500/30"
+              onClick={() => deleteWidget(widgetKey, title)}
+              className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all text-red-400"
+              title="Удалить виджет"
             >
-              <Plus size={16} className="text-emerald-400" />
+              <Trash2 size={16} />
             </button>
           </div>
         )}
         <div className={`${isHidden ? 'opacity-40 blur-[2px] pointer-events-none' : ''} transition-all flex flex-col flex-1`}>
-          <h3 className="text-xl font-bold text-white mb-6 pr-24">{title}</h3>
+          <div className="mb-6 pr-24">
+            {isEditing ? (
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setWidgetTitles((prev) => ({ ...prev, [titleKey]: e.target.value }))}
+                className="w-full max-w-xl bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-xl font-bold text-white"
+              />
+            ) : (
+              <h3 className="text-xl font-bold text-white">{title}</h3>
+            )}
+          </div>
           
           {/* Desktop Table */}
           <div className="overflow-x-auto hidden md:block">
@@ -568,6 +756,16 @@ export function RedCapPage({
               );
             })}
           </div>
+          {isEditing && (
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => addMetric(setter)}
+                className="p-2 bg-emerald-500/20 hover:bg-emerald-500/30 rounded-xl transition-all border border-emerald-500/30"
+              >
+                <Plus size={16} className="text-emerald-400" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -607,28 +805,49 @@ export function RedCapPage({
         )}
 
         <div className="space-y-6">
-          {renderMetricsTable('SCORE-КАРТА', digitalMetrics, setDigitalMetrics, 'scoreCard')}
-          {renderMetricsTable('СТАБИЛЬНОСТЬ/ПРОЕКТЫ', stabilityMetrics, setStabilityMetrics, 'stability')}
-          {renderMetricsTable('ПРОИЗВОДСТВО', productionMetrics, setProductionMetrics, 'production')}
+          {renderMetricsTable('scoreCard', digitalMetrics, setDigitalMetrics, 'scoreCard')}
+          {renderMetricsTable('stability', stabilityMetrics, setStabilityMetrics, 'stability')}
+          {renderMetricsTable('production', productionMetrics, setProductionMetrics, 'production')}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {!deletedWidgets.voc && !purgedWidgets.voc && (
             <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl shadow-black/20 relative flex flex-col">
               {isEditing && (
-                <button 
-                  onClick={() => toggleWidgetVisibility('voc')} 
-                  className="absolute top-6 right-6 z-50 p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/10"
-                >
-                  {hiddenWidgets.voc ? <Eye size={16} className="text-white" /> : <EyeOff size={16} className="text-gray-400" />}
-                </button>
+                <div className="absolute top-6 right-6 z-50 flex gap-2">
+                  <button
+                    onClick={() => toggleWidgetVisibility('voc')}
+                    className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/10"
+                  >
+                    {hiddenWidgets.voc ? <Eye size={16} className="text-white" /> : <EyeOff size={16} className="text-gray-400" />}
+                  </button>
+                  <button
+                    onClick={() => deleteWidget('voc', widgetTitles.voc)}
+                    className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all text-red-400"
+                    title="Удалить виджет"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               )}
               <div className={`${hiddenWidgets.voc ? 'opacity-40 blur-[2px] pointer-events-none' : ''} transition-all flex flex-col flex-1`}>
-                <h3 className="text-xl font-bold text-white mb-4 pr-10">{vocTitle}</h3>
+                <div className="mb-4 pr-24">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={widgetTitles.voc}
+                      onChange={(e) => setWidgetTitles((prev) => ({ ...prev, voc: e.target.value }))}
+                      className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-xl font-bold text-white"
+                    />
+                  ) : (
+                    <h3 className="text-xl font-bold text-white">{widgetTitles.voc}</h3>
+                  )}
+                </div>
                 
                 {/* Main НИБ Value */}
                 <div className="mb-6 flex flex-col items-start">
                   {isEditing ? (
                     <input type="number" step="0.01" value={vocData.nib} 
-                      onChange={(e) => setVocData({...vocData, nib: parseFloat(e.target.value)})}
+                      onChange={(e) => setVocData({...vocData, nib: parseFloat(e.target.value) || 0})}
                       className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-white text-4xl font-bold" />
                   ) : (
                     <div className="text-4xl font-bold text-green-400 mb-2">{vocData.nib}</div>
@@ -646,37 +865,90 @@ export function RedCapPage({
 
                 {/* Other values in a column */}
                 <div className="space-y-3 mt-auto">
-                  {[
-                    { label: 'ММБ', key: 'mmb' },
-                    { label: 'СБ', key: 'sb' },
-                    { label: 'КИБ', key: 'kib' },
-                  ].map(({ label, key }) => (
-                    <div key={key} className="grid grid-cols-[1fr_1fr] items-center">
-                      <div className="text-sm text-gray-500">{label}</div>
+                  {(vocData.items || []).map((item) => (
+                    <div key={item.id} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
                       {isEditing ? (
-                        <input type="number" step="0.01" value={vocData[key as keyof typeof vocData]} 
-                          onChange={(e) => setVocData({...vocData, [key]: parseFloat(e.target.value)})}
-                          className="w-20 bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-white text-sm font-bold" />
+                        <input
+                          type="text"
+                          value={item.label}
+                          onChange={(e) => updateVocItem(item.id, { label: e.target.value })}
+                          className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-sm text-gray-300"
+                          placeholder="Название"
+                        />
                       ) : (
-                        <div className="text-lg font-bold text-green-400">{vocData[key as keyof typeof vocData]}</div>
+                        <div className="text-sm text-gray-500">{item.label}</div>
+                      )}
+                      {isEditing ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={item.value}
+                          onChange={(e) => updateVocItem(item.id, { value: parseFloat(e.target.value) || 0 })}
+                          className="w-20 bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-white text-sm font-bold"
+                        />
+                      ) : (
+                        <div className="text-lg font-bold text-green-400">{item.value}</div>
+                      )}
+                      {isEditing && (
+                        <button
+                          onClick={() => deleteVocItem(item.id)}
+                          className="p-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-all text-red-400"
+                          title="Удалить строку"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       )}
                     </div>
                   ))}
                 </div>
+                {isEditing && (
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      onClick={addVocItem}
+                      disabled={(vocData.items || []).length >= 5}
+                      className="p-2 bg-emerald-500/20 hover:bg-emerald-500/30 rounded-xl transition-all border border-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={(vocData.items || []).length >= 5 ? 'Максимум 5 строк' : 'Добавить строку'}
+                    >
+                      <Plus size={16} className="text-emerald-400" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
+            )}
 
+            {!deletedWidgets.enps && !purgedWidgets.enps && (
             <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl shadow-black/20 relative flex flex-col">
               {isEditing && (
-                <button 
-                  onClick={() => toggleWidgetVisibility('enps')} 
-                  className="absolute top-6 right-6 z-50 p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/10"
-                >
-                  {hiddenWidgets.enps ? <Eye size={16} className="text-white" /> : <EyeOff size={16} className="text-gray-400" />}
-                </button>
+                <div className="absolute top-6 right-6 z-50 flex gap-2">
+                  <button 
+                    onClick={() => toggleWidgetVisibility('enps')} 
+                    className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/10"
+                  >
+                    {hiddenWidgets.enps ? <Eye size={16} className="text-white" /> : <EyeOff size={16} className="text-gray-400" />}
+                  </button>
+                  <button
+                    onClick={() => deleteWidget('enps', widgetTitles.enps)}
+                    className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all text-red-400"
+                    title="Удалить виджет"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               )}
               <div className={`${hiddenWidgets.enps ? 'opacity-40 blur-[2px] pointer-events-none' : ''} transition-all flex flex-col flex-1`}>
-                <h3 className="text-xl font-bold text-white mb-4 pr-10">eNPS</h3>
+                <div className="mb-4 pr-10">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={widgetTitles.enps}
+                      onChange={(e) => setWidgetTitles((prev) => ({ ...prev, enps: e.target.value }))}
+                      className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-xl font-bold text-white"
+                    />
+                  ) : (
+                    <h3 className="text-xl font-bold text-white">{widgetTitles.enps}</h3>
+                  )}
+                </div>
                 {isEditing ? (
                   <div className="space-y-3">
                     <input type="number" value={enpsData.value} onChange={(e) => setEnpsData({...enpsData, value: parseInt(e.target.value)})}
@@ -689,18 +961,40 @@ export function RedCapPage({
                 )}
               </div>
             </div>
+            )}
 
+            {!deletedWidgets.visibility && !purgedWidgets.visibility && (
             <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl shadow-black/20 relative flex flex-col">
               {isEditing && (
-                <button 
-                  onClick={() => toggleWidgetVisibility('visibility')} 
-                  className="absolute top-6 right-6 z-50 p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/10"
-                >
-                  {hiddenWidgets.visibility ? <Eye size={16} className="text-white" /> : <EyeOff size={16} className="text-gray-400" />}
-                </button>
+                <div className="absolute top-6 right-6 z-50 flex gap-2">
+                  <button 
+                    onClick={() => toggleWidgetVisibility('visibility')} 
+                    className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/10"
+                  >
+                    {hiddenWidgets.visibility ? <Eye size={16} className="text-white" /> : <EyeOff size={16} className="text-gray-400" />}
+                  </button>
+                  <button
+                    onClick={() => deleteWidget('visibility', widgetTitles.visibility)}
+                    className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all text-red-400"
+                    title="Удалить виджет"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               )}
               <div className={`${hiddenWidgets.visibility ? 'opacity-40 blur-[2px] pointer-events-none' : ''} transition-all flex flex-col flex-1`}>
-                <h3 className="text-xl font-bold text-white mb-4 pr-10">visibility</h3>
+                <div className="mb-4 pr-10">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={widgetTitles.visibility}
+                      onChange={(e) => setWidgetTitles((prev) => ({ ...prev, visibility: e.target.value }))}
+                      className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-xl font-bold text-white"
+                    />
+                  ) : (
+                    <h3 className="text-xl font-bold text-white">{widgetTitles.visibility}</h3>
+                  )}
+                </div>
                 {isEditing ? (
                   <div className="space-y-3">
                     <input type="number" value={visibilityData.value} onChange={(e) => setVisibilityData({...visibilityData, value: parseInt(e.target.value)})}
@@ -713,17 +1007,47 @@ export function RedCapPage({
                 )}
               </div>
             </div>
+            )}
           </div>
 
+          {!deletedWidgets.totals && !purgedWidgets.totals && (
           <div className="bg-gradient-to-br from-[#1c1c1c] to-[#0a0a0a] border border-red-900/30 rounded-3xl p-6 shadow-[0_8px_30px_rgba(239,68,68,0.05)] relative overflow-hidden">
+            {isEditing && (
+              <div className="absolute top-6 right-6 z-50 flex gap-2">
+                <button
+                  onClick={() => toggleWidgetVisibility('totals')}
+                  className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/10"
+                >
+                  {hiddenWidgets.totals ? <Eye size={16} className="text-white" /> : <EyeOff size={16} className="text-gray-400" />}
+                </button>
+                <button
+                  onClick={() => deleteWidget('totals', widgetTitles.totals)}
+                  className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all text-red-400"
+                  title="Удалить виджет"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            )}
             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 mix-blend-overlay pointer-events-none"></div>
-            <h3 className="text-sm text-gray-400 mb-4 uppercase tracking-wide font-medium relative z-10">Итоговые показатели красной шапочки</h3>
+            <div className="mb-4 relative z-10">
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={widgetTitles.totals}
+                  onChange={(e) => setWidgetTitles((prev) => ({ ...prev, totals: e.target.value }))}
+                  className="w-full max-w-2xl bg-[#0a0a0a]/60 border border-gray-700/40 rounded px-3 py-2 text-sm text-gray-300 uppercase tracking-wide font-medium"
+                />
+              ) : (
+                <h3 className="text-sm text-gray-400 uppercase tracking-wide font-medium">{widgetTitles.totals}</h3>
+              )}
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 items-end relative z-10">
               {[
-                { id: 'scoreCard', title: 'SCORE-КАРТА', value: scoreCardValue, weight: totalsConfig.weights.scoreCard },
-                { id: 'stability', title: 'СТАБИЛЬНОСТЬ/ПРОЕКТЫ', value: stabilityValue, weight: totalsConfig.weights.stability },
-                { id: 'production', title: 'ПРОИЗВОДСТВО', value: productionValue, weight: totalsConfig.weights.production },
-                { id: 'voc', title: 'VOC', value: vocValue, weight: totalsConfig.weights.voc },
+                { id: 'scoreCard', title: widgetTitles.scoreCard, value: scoreCardValue, weight: totalsConfig.weights.scoreCard },
+                { id: 'stability', title: widgetTitles.stability, value: stabilityValue, weight: totalsConfig.weights.stability },
+                { id: 'production', title: widgetTitles.production, value: productionValue, weight: totalsConfig.weights.production },
+                { id: 'voc', title: widgetTitles.voc, value: vocValue, weight: totalsConfig.weights.voc },
                 { id: 'personnel', title: 'Персоналии', value: personnelValue, weight: totalsConfig.weights.personnel },
                 { id: 'total', title: 'ИТОГО КРАСНАЯ ШАПОЧКА', value: totalRedCap, weight: '', isTotal: true },
               ].map((item, index) => (
@@ -764,6 +1088,28 @@ export function RedCapPage({
               ))}
             </div>
           </div>
+          )}
+
+          {isEditing && (
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={() => setIsTrashModalOpen(true)}
+                className="w-[360px] max-w-full rounded-[26px] border border-white/20 bg-white/[0.08] backdrop-blur-2xl px-5 py-4 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_14px_30px_rgba(0,0,0,0.42)] hover:bg-white/[0.12] transition-all"
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-lg font-bold text-white">Корзина виджетов</div>
+                    <div className="text-sm text-gray-300/90 mt-1">
+                      Удаленных: {deletedWidgetList.length}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-xl border border-white/20 bg-black/20 text-red-300">
+                    <Trash2 size={18} />
+                  </div>
+                </div>
+              </button>
+            </div>
+          )}
         </div>
 
         {isEditing && (
@@ -789,6 +1135,54 @@ export function RedCapPage({
         onClose={handlePasswordCancel} 
         onSuccess={handlePasswordSuccess} 
       />
+
+      {isTrashModalOpen && (
+        <div className="fixed inset-0 z-[130] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-[#0c0c12] p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-2xl font-bold text-white">Корзина виджетов</h3>
+              <button
+                onClick={() => setIsTrashModalOpen(false)}
+                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {deletedWidgetList.length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-gray-400">
+                Корзина пустая
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                {deletedWidgetList.map((widget) => (
+                  <div
+                    key={widget.key}
+                    className="rounded-2xl border border-white/10 bg-white/5 p-4 flex items-center justify-between gap-3"
+                  >
+                    <div className="text-white font-medium">{widget.title}</div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => restoreWidget(widget.key)}
+                        className="px-3 py-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-all text-sm flex items-center gap-2"
+                      >
+                        <RotateCcw size={14} />
+                        Восстановить
+                      </button>
+                      <button
+                        onClick={() => purgeWidget(widget.key)}
+                        className="px-3 py-2 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 transition-all text-sm"
+                      >
+                        Удалить окончательно
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
