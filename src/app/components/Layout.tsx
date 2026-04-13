@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
-import { BarChart3, Target, ChevronLeft, ChevronRight, Edit3, X, Goal, Download, LogOut, CalendarDays, Settings, EyeOff, Eye, Save, TrendingUp, GripVertical } from 'lucide-react';
+import { BarChart3, Target, ChevronLeft, ChevronRight, Edit3, X, Goal, Download, LogOut, CalendarDays, Settings, EyeOff, Eye, Save, TrendingUp, GripVertical, Plus, FileText, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState, type DragEvent } from 'react';
 import logoImage from '../../assets/5b6ead3363f3911c8fbce32735c6a3c819462945.png';
 import * as XLSX from 'xlsx';
@@ -11,6 +11,18 @@ interface MenuItemConfig {
   label: string;
   hidden?: boolean;
   order: number;
+}
+
+interface CustomPageConfig {
+  id: string;
+  label: string;
+  hidden?: boolean;
+  order: number;
+}
+
+interface MenuConfigPayload {
+  items?: MenuItemConfig[];
+  customPages?: CustomPageConfig[];
 }
 
 const DEFAULT_MENU: MenuItemConfig[] = [
@@ -29,6 +41,33 @@ const MENU_META = {
   'ksh-cdpo': { path: '/ksh-cdpo', icon: TrendingUp },
 };
 
+const normalizeMenuPayload = (raw: any): { items: MenuItemConfig[]; customPages: CustomPageConfig[] } => {
+  const data = raw?.items ? raw : { items: raw, customPages: [] };
+  const normalized = Array.isArray(data?.items) ? data.items : [];
+  const mergedItems: MenuItemConfig[] = DEFAULT_MENU.map((item) => {
+    const found = normalized.find((entry: any) => entry.id === item.id);
+    return {
+      ...item,
+      label: found?.label || item.label,
+      hidden: typeof found?.hidden === 'boolean' ? found.hidden : false,
+      order: typeof found?.order === 'number' ? found.order : item.order,
+    };
+  });
+
+  const customPages: CustomPageConfig[] = Array.isArray(data?.customPages)
+    ? data.customPages
+        .filter((page: any) => typeof page?.id === 'string' && page.id)
+        .map((page: any, index: number) => ({
+          id: page.id,
+          label: page.label || `Страница ${index + 1}`,
+          hidden: typeof page.hidden === 'boolean' ? page.hidden : false,
+          order: typeof page.order === 'number' ? page.order : index + 1,
+        }))
+    : [];
+
+  return { items: mergedItems, customPages };
+};
+
 export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -39,7 +78,9 @@ export function Layout() {
   const [currentYear] = useState(() => new Date().getFullYear());
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [menuConfig, setMenuConfig] = useState<MenuItemConfig[]>(DEFAULT_MENU);
+  const [customPages, setCustomPages] = useState<CustomPageConfig[]>([]);
   const [menuDraft, setMenuDraft] = useState<MenuItemConfig[]>([]);
+  const [customPagesDraft, setCustomPagesDraft] = useState<CustomPageConfig[]>([]);
   const [isMenuSettingsMode, setIsMenuSettingsMode] = useState(false);
   const [isMenuPasswordOpen, setIsMenuPasswordOpen] = useState(false);
   const [draggedMenuItemId, setDraggedMenuItemId] = useState<MenuItemConfig['id'] | null>(null);
@@ -60,28 +101,21 @@ export function Layout() {
     isActive('/') ||
     isActive('/metrics') ||
     isActive('/dashboard') ||
-    location.pathname.startsWith('/ksh-cdpo');
+    location.pathname.startsWith('/ksh-cdpo') ||
+    location.pathname.startsWith('/workspace/');
   const showGoalsExport = isActive('/goals');
 
   useEffect(() => {
     const loadMenu = async () => {
       try {
         const result = await menuAPI.get();
-        const data = result?.items || result;
-        const normalized = Array.isArray(data) ? data : [];
-        const merged = DEFAULT_MENU.map((item) => {
-          const found = normalized.find((entry: any) => entry.id === item.id);
-          return {
-            ...item,
-            label: found?.label || item.label,
-            hidden: typeof found?.hidden === 'boolean' ? found.hidden : false,
-            order: typeof found?.order === 'number' ? found.order : item.order,
-          };
-        });
-        setMenuConfig(merged);
+        const { items, customPages: pages } = normalizeMenuPayload(result);
+        setMenuConfig(items);
+        setCustomPages(pages);
       } catch (err) {
         console.error('Failed to load menu config:', err);
         setMenuConfig(DEFAULT_MENU);
+        setCustomPages([]);
       }
     };
     loadMenu();
@@ -93,6 +127,12 @@ export function Layout() {
       .sort((a, b) => a.order - b.order);
   }, [menuConfig]);
 
+  const visibleCustomPages = useMemo(() => {
+    return [...customPages]
+      .filter((item) => !item.hidden)
+      .sort((a, b) => a.order - b.order);
+  }, [customPages]);
+
   const sortedMenuDraft = useMemo(
     () => [...menuDraft].sort((a, b) => a.order - b.order),
     [menuDraft],
@@ -100,6 +140,7 @@ export function Layout() {
 
   const openMenuSettings = () => {
     setMenuDraft([...menuConfig].sort((a, b) => a.order - b.order));
+    setCustomPagesDraft([...customPages].sort((a, b) => a.order - b.order));
     setIsMenuSettingsMode(true);
   };
 
@@ -109,8 +150,14 @@ export function Layout() {
         ...item,
         order: index + 1,
       }));
+      const normalizedCustomPages = [...customPagesDraft]
+        .sort((a, b) => a.order - b.order)
+        .map((item, index) => ({ ...item, order: index + 1 }));
+
+      const payload: MenuConfigPayload = { items: normalized, customPages: normalizedCustomPages };
       setMenuConfig(normalized);
-      await menuAPI.save({ items: normalized });
+      setCustomPages(normalizedCustomPages);
+      await menuAPI.save(payload);
       setIsMenuSettingsMode(false);
     } catch (err) {
       alert('Ошибка при сохранении меню: ' + (err as any).message);
@@ -120,8 +167,33 @@ export function Layout() {
   const handleMenuCancel = () => {
     setIsMenuSettingsMode(false);
     setMenuDraft([]);
+    setCustomPagesDraft([]);
     setDraggedMenuItemId(null);
     setDragOverMenuItem(null);
+  };
+
+  const createCustomPage = () => {
+    setCustomPagesDraft((prev) => {
+      const sorted = [...prev].sort((a, b) => a.order - b.order);
+      const nextOrder = sorted.length > 0 ? sorted[sorted.length - 1].order + 1 : 1;
+      return [
+        ...sorted,
+        {
+          id: crypto.randomUUID(),
+          label: 'Новая страница',
+          hidden: false,
+          order: nextOrder,
+        },
+      ];
+    });
+  };
+
+  const updateCustomPage = (id: string, updates: Partial<CustomPageConfig>) => {
+    setCustomPagesDraft((prev) => prev.map((page) => (page.id === id ? { ...page, ...updates } : page)));
+  };
+
+  const deleteCustomPage = (id: string) => {
+    setCustomPagesDraft((prev) => prev.filter((page) => page.id !== id));
   };
 
   const reorderMenuDraft = (
@@ -249,9 +321,15 @@ export function Layout() {
     if (dashData.vocData) {
       dashRows.push([]);
       dashRows.push(["VOC Канал АБ", "НИБ", "", dashData.vocData.nib, "", dashData.vocData.plan || dashData.vocData.range, "", ""]);
-      dashRows.push(["", "ММБ", "", dashData.vocData.mmb, "", "", "", ""]);
-      dashRows.push(["", "СБ", "", dashData.vocData.sb, "", "", "", ""]);
-      dashRows.push(["", "КИБ", "", dashData.vocData.kib, "", "", "", ""]);
+      if (Array.isArray(dashData.vocData.items) && dashData.vocData.items.length > 0) {
+        dashData.vocData.items.forEach((item: any) => {
+          dashRows.push(["", item.label || "", "", item.value ?? "", "", "", "", ""]);
+        });
+      } else {
+        dashRows.push(["", "ММБ", "", dashData.vocData.mmb, "", "", "", ""]);
+        dashRows.push(["", "СБ", "", dashData.vocData.sb, "", "", "", ""]);
+        dashRows.push(["", "КИБ", "", dashData.vocData.kib, "", "", "", ""]);
+      }
     }
     
     if (dashData.enpsData) {
@@ -401,6 +479,16 @@ export function Layout() {
                 </Link>
               );
             })}
+            {visibleCustomPages.map((page) => (
+              <Link
+                key={page.id}
+                to={`/workspace/${page.id}`}
+                className={`p-2 rounded-xl transition-all ${isActive(`/workspace/${page.id}`) ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30' : 'text-gray-400 hover:text-white'}`}
+                title={page.label}
+              >
+                <FileText size={20} />
+              </Link>
+            ))}
           </div>
         </div>
 
@@ -501,26 +589,92 @@ export function Layout() {
                 })}
               </div>
 
+              <div className="mt-4 px-2">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-xs uppercase tracking-wide text-gray-500">Пользовательские страницы</div>
+                  <button
+                    onClick={createCustomPage}
+                    className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 rounded-lg border border-emerald-500/30"
+                    title="Добавить страницу"
+                  >
+                    <Plus size={14} className="text-emerald-400" />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {[...customPagesDraft].sort((a, b) => a.order - b.order).map((page) => (
+                    <div key={page.id} className="rounded-2xl border border-white/10 bg-[#0a0a0a]/50 p-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                          <FileText size={16} className="text-gray-300" />
+                        </div>
+                        <input
+                          type="text"
+                          value={page.label}
+                          onChange={(e) => updateCustomPage(page.id, { label: e.target.value })}
+                          className="flex-1 min-w-0 bg-[#0a0a0a]/70 border border-gray-700/40 rounded-xl px-3 py-2 text-white text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => updateCustomPage(page.id, { hidden: !page.hidden })}
+                          className={`p-2 rounded-xl border shrink-0 transition-all ${
+                            page.hidden ? 'bg-white/5 border-white/10 text-gray-500' : 'bg-white/10 border-white/15 text-white'
+                          }`}
+                          title={page.hidden ? 'Показать страницу' : 'Скрыть страницу'}
+                        >
+                          {page.hidden ? <Eye size={16} /> : <EyeOff size={16} />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteCustomPage(page.id)}
+                          className="p-2 rounded-xl border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400 shrink-0 transition-all"
+                          title="Удалить страницу"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex-1" />
             </>
-          ) : visibleMenu.map((item) => {
-            const meta = MENU_META[item.id];
-            const Icon = meta.icon;
-            return (
-              <Link
-                key={item.id}
-                to={meta.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl mb-2 transition-all duration-300 ${
-                  isMenuPathActive(meta.path)
-                    ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30'
-                    : 'text-gray-400 hover:bg-white/5 hover:text-white'
-                }`}
-              >
-                <Icon size={20} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+          ) : (
+            <>
+              {visibleMenu.map((item) => {
+                const meta = MENU_META[item.id];
+                const Icon = meta.icon;
+                return (
+                  <Link
+                    key={item.id}
+                    to={meta.path}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl mb-2 transition-all duration-300 ${
+                      isMenuPathActive(meta.path)
+                        ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30'
+                        : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <Icon size={20} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+              {visibleCustomPages.map((page) => (
+                <Link
+                  key={page.id}
+                  to={`/workspace/${page.id}`}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl mb-2 transition-all duration-300 ${
+                    isActive(`/workspace/${page.id}`)
+                      ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30'
+                      : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                  }`}
+                >
+                  <FileText size={20} />
+                  <span>{page.label}</span>
+                </Link>
+              ))}
+            </>
+          )}
 
           {/* Spacer */}
           <div className="flex-1"></div>

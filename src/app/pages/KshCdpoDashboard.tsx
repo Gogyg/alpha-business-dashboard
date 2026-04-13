@@ -19,7 +19,16 @@ const createBlankRedcapData = () => ({
   digitalMetrics: [createBlankMetric()],
   stabilityMetrics: [createBlankMetric()],
   productionMetrics: [createBlankMetric()],
-  vocData: { nib: 0, mmb: 0, sb: 0, kib: 0, range: "0-0", plan: 85 },
+  vocData: {
+    nib: 0,
+    range: "0-0",
+    plan: 85,
+    items: [
+      { id: "voc-mmb", label: "ММБ", value: 0 },
+      { id: "voc-sb", label: "СБ", value: 0 },
+      { id: "voc-kib", label: "КИБ", value: 0 },
+    ],
+  },
   enpsData: { value: 0, plan: 85 },
   visibilityData: { value: 0, plan: 358 },
   totalsConfig: {
@@ -27,6 +36,8 @@ const createBlankRedcapData = () => ({
     overrides: { scoreCard: "", stability: "", production: "", voc: "", personnel: "100", total: "" },
   },
   hiddenWidgets: {},
+  deletedWidgets: {},
+  purgedWidgets: {},
 });
 
 export function KshCdpoDashboard() {

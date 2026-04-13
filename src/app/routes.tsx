@@ -6,6 +6,7 @@ import { Goals } from "./pages/Goals";
 import { EventsDashboard } from "./pages/EventsDashboard";
 import { KshCdpoPage } from "./pages/KshCdpoPage";
 import { KshCdpoDashboard } from "./pages/KshCdpoDashboard";
+import { WorkspacePage } from "./pages/WorkspacePage";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import { getAuthToken } from "./utils/api";
@@ -44,6 +45,7 @@ export const router = createBrowserRouter([
       { path: "goals", Component: Goals },
       { path: "ksh-cdpo", Component: KshCdpoPage },
       { path: "ksh-cdpo/:dashboardId", Component: KshCdpoDashboard },
+      { path: "workspace/:pageId", Component: WorkspacePage },
     ],
   },
 ]);
