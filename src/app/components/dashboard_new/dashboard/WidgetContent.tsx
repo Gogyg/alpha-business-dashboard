@@ -142,7 +142,9 @@ function TableWidget({ data, isEditing, onUpdate }: { data: any, isEditing: bool
                     <input type="number" value={normalized.fact} onChange={(e) => handleEdit(m.id, 'fact', e.target.value)} 
                       className="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white" />
                   ) : (
-                    <span className={`text-sm font-bold ${percentColor}`}>{normalized.fact.toLocaleString()}</span>
+                    <span className={`text-sm font-bold ${percentColor}`}>
+                      {Number.isFinite(Number(normalized.fact)) ? Number(normalized.fact).toLocaleString() : "—"}
+                    </span>
                   )}
                 </td>
                 <td className="py-3">

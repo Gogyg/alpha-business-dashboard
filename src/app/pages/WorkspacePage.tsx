@@ -167,6 +167,7 @@ export function WorkspacePage() {
   const [draggedWidget, setDraggedWidget] = useState<{ sectionId: string; widgetId: string } | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<DragOverTarget>(null);
   const [dropPulseWidgetId, setDropPulseWidgetId] = useState<string | null>(null);
+  const baseLayoutRef = useRef<PageLayout>(createDefaultLayout());
   const dragPreviewTargetRef = useRef<string>("");
   const dropPulseTimerRef = useRef<number | null>(null);
 
@@ -177,10 +178,14 @@ export function WorkspacePage() {
       const payload = (await menuAPI.get()) || {};
       const normalized: MenuPayload = payload?.items ? payload : { items: payload };
       const saved = normalized.customPageLayouts?.[pageId];
-      setLayout(saved?.sections ? saved : createDefaultLayout());
+      const nextLayout = saved?.sections ? saved : createDefaultLayout();
+      setLayout(nextLayout);
+      baseLayoutRef.current = JSON.parse(JSON.stringify(nextLayout));
     } catch (err) {
       console.error("Failed to load workspace page:", err);
-      setLayout(createDefaultLayout());
+      const defaultLayout = createDefaultLayout();
+      setLayout(defaultLayout);
+      baseLayoutRef.current = JSON.parse(JSON.stringify(defaultLayout));
     } finally {
       setLoading(false);
     }
@@ -487,10 +492,61 @@ export function WorkspacePage() {
   const save = async () => {
     if (!pageId) return;
     try {
+      const isSameData = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
+      const mergeSectionsByDiff = (
+        baseSections: SectionItem[],
+        localSections: SectionItem[],
+        latestSections: SectionItem[],
+      ) => {
+        const mergedMap = new Map<string, SectionItem>(latestSections.map((section) => [section.id, section]));
+        const baseMap = new Map<string, SectionItem>(baseSections.map((section) => [section.id, section]));
+        const localMap = new Map<string, SectionItem>(localSections.map((section) => [section.id, section]));
+        const ids = new Set<string>([
+          ...Array.from(baseMap.keys()),
+          ...Array.from(localMap.keys()),
+        ]);
+
+        ids.forEach((id) => {
+          const baseSection = baseMap.get(id);
+          const localSection = localMap.get(id);
+
+          if (baseSection && !localSection) {
+            mergedMap.delete(id);
+            return;
+          }
+
+          if (!baseSection && localSection) {
+            mergedMap.set(id, localSection);
+            return;
+          }
+
+          if (baseSection && localSection && !isSameData(baseSection, localSection)) {
+            mergedMap.set(id, localSection);
+          }
+        });
+
+        const latestOrder = latestSections.map((section) => section.id);
+        const localOrder = localSections.map((section) => section.id);
+        const order = [...latestOrder, ...localOrder.filter((id) => !latestOrder.includes(id))];
+
+        return order
+          .map((id) => mergedMap.get(id))
+          .filter((section): section is SectionItem => Boolean(section));
+      };
+
       const current = (await menuAPI.get()) || {};
       const payload: MenuPayload = current?.items ? current : { items: current };
-      const nextLayouts = { ...(payload.customPageLayouts || {}), [pageId]: layout };
+      const latestLayout = payload.customPageLayouts?.[pageId]?.sections
+        ? payload.customPageLayouts[pageId]
+        : createDefaultLayout();
+      const baseLayout = baseLayoutRef.current || createDefaultLayout();
+      const mergedLayout: PageLayout = {
+        sections: mergeSectionsByDiff(baseLayout.sections || [], layout.sections || [], latestLayout.sections || []),
+      };
+      const nextLayouts = { ...(payload.customPageLayouts || {}), [pageId]: mergedLayout };
       await menuAPI.save({ ...payload, customPageLayouts: nextLayouts });
+      setLayout(mergedLayout);
+      baseLayoutRef.current = JSON.parse(JSON.stringify(mergedLayout));
       setIsEditing(false);
       setIsEditingMode(false);
     } catch (err) {
@@ -1105,7 +1161,7 @@ function StabilityWidgetCard({
                         className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-1.5 text-white"
                       />
                     ) : (
-                      <span className={percentColor}>{metric.fact.toLocaleString("ru-RU")}</span>
+                      <span className={percentColor}>{Number.isFinite(Number(metric.fact)) ? Number(metric.fact).toLocaleString("ru-RU") : "—"}</span>
                     )}
                   </td>
                   {isEditing && (

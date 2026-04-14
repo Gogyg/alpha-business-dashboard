@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Save, Plus, Trash2, Eye, EyeOff, Loader2, ArrowLeft, X, RotateCcw } from 'lucide-react';
 import { Link, useOutletContext } from 'react-router';
 import { PasswordModal } from '../components/PasswordModal';
@@ -94,12 +94,15 @@ export function RedCapPage({
     visibility: 'visibility',
     totals: 'Итоговые показатели красной шапочки',
   });
+  const initialDataRef = useRef<any>(null);
 
   const normalizeMetric = (metric: Metric): Metric => {
     const rawMax = typeof metric.maxPercent === 'string' ? metric.maxPercent : '∞';
     const cleanedMax = rawMax.replace(/\s/g, '').replace(/∞/g, '') || '∞';
     return {
       ...metric,
+      fact: Number.isFinite(Number(metric.fact)) ? Number(metric.fact) : 0,
+      plan: Number.isFinite(Number(metric.plan)) ? Number(metric.plan) : 0,
       type: metric.type || '=',
       maxPercent: cleanedMax,
       factColor: metric.factColor,
@@ -141,6 +144,26 @@ export function RedCapPage({
   };
 
   const syncMetrics = (metrics: Metric[] = []) => metrics.map(syncMetric);
+  const isSameData = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
+
+  const mergeChangedFields = (baseData: any, localData: any, latestData: any) => {
+    const merged: any = {};
+    const keys = new Set([
+      ...Object.keys(baseData || {}),
+      ...Object.keys(localData || {}),
+      ...Object.keys(latestData || {}),
+    ]);
+
+    for (const key of keys) {
+      const localValue = localData?.[key];
+      const baseValue = baseData?.[key];
+      const latestValue = latestData?.[key];
+      const wasChangedLocally = !isSameData(localValue, baseValue);
+      merged[key] = wasChangedLocally ? localValue : latestValue;
+    }
+
+    return merged;
+  };
 
   const normalizeVocData = (raw: any): VocData => {
     const nib = Number.isFinite(Number(raw?.nib)) ? Number(raw.nib) : 0;
@@ -260,6 +283,19 @@ export function RedCapPage({
         setHiddenWidgets(sourceData.hiddenWidgets || {});
         setDeletedWidgets(sourceData.deletedWidgets || {});
         setPurgedWidgets(sourceData.purgedWidgets || {});
+        initialDataRef.current = {
+          digitalMetrics: syncMetrics(sourceData.digitalMetrics || []),
+          stabilityMetrics: syncMetrics(sourceData.stabilityMetrics || []),
+          productionMetrics: syncMetrics(sourceData.productionMetrics || []),
+          vocData: normalizeVocData(sourceData.vocData),
+          enpsData: sourceData.enpsData,
+          visibilityData: sourceData.visibilityData,
+          totalsConfig: sourceData.totalsConfig || getDefaultData().totalsConfig,
+          widgetTitles: { ...getDefaultWidgetTitles(), ...(sourceData.widgetTitles || {}) },
+          hiddenWidgets: sourceData.hiddenWidgets || {},
+          deletedWidgets: sourceData.deletedWidgets || {},
+          purgedWidgets: sourceData.purgedWidgets || {},
+        };
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
       } finally {
@@ -273,7 +309,7 @@ export function RedCapPage({
     if (!isEditing) return;
     try {
       setLoading(true);
-      const payload = {
+      const localPayload = {
         digitalMetrics: syncMetrics(digitalMetrics),
         stabilityMetrics: syncMetrics(stabilityMetrics),
         productionMetrics: syncMetrics(productionMetrics),
@@ -286,6 +322,22 @@ export function RedCapPage({
         deletedWidgets,
         purgedWidgets,
       };
+      const latestRaw = (await loadDataProp(currentQuarter)) || getDefaultData();
+      const latestPayload = {
+        digitalMetrics: syncMetrics(latestRaw.digitalMetrics || []),
+        stabilityMetrics: syncMetrics(latestRaw.stabilityMetrics || []),
+        productionMetrics: syncMetrics(latestRaw.productionMetrics || []),
+        vocData: normalizeVocData(latestRaw.vocData),
+        enpsData: latestRaw.enpsData,
+        visibilityData: latestRaw.visibilityData,
+        totalsConfig: latestRaw.totalsConfig || getDefaultData().totalsConfig,
+        widgetTitles: { ...getDefaultWidgetTitles(), ...(latestRaw.widgetTitles || {}) },
+        hiddenWidgets: latestRaw.hiddenWidgets || {},
+        deletedWidgets: latestRaw.deletedWidgets || {},
+        purgedWidgets: latestRaw.purgedWidgets || {},
+      };
+      const basePayload = initialDataRef.current || localPayload;
+      const payload = mergeChangedFields(basePayload, localPayload, latestPayload);
 
       await saveDataProp(currentQuarter, payload);
 
@@ -294,6 +346,7 @@ export function RedCapPage({
       const allData = stored ? JSON.parse(stored) : {};
       allData[currentQuarter] = payload;
       localStorage.setItem(localStorageKey, JSON.stringify(allData));
+      initialDataRef.current = JSON.parse(JSON.stringify(payload));
       setIsEditing(false);
       setIsEditingMode(false);
     } catch (err) {
@@ -313,6 +366,13 @@ export function RedCapPage({
       totalScore += weight * percent;
     });
     return totalWeight > 0 ? (totalScore / totalWeight * 100).toFixed(0) : '0';
+  };
+
+  const formatMetricNumber = (value: number | null | undefined) => {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return '—';
+    }
+    return value.toLocaleString('ru-RU');
   };
 
   const scoreCardCalc = calculateScore(digitalMetrics);
@@ -622,7 +682,7 @@ export function RedCapPage({
                         ) : (
                           <div className="flex items-center gap-2">
                             <span className={metric.factColor ? factColorClass(metric.factColor) : percentColor}>
-                              {metric.fact.toLocaleString('ru-RU')}
+                              {formatMetricNumber(metric.fact)}
                             </span>
                             {metric.factColor && (
                               <span className={`h-3 w-3 rounded-full border ${factDotClass(metric.factColor)}`} />
@@ -655,7 +715,7 @@ export function RedCapPage({
                             className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-1.5 text-white"
                           />
                         ) : (
-                          <span className="text-gray-400">{`${metric.type || '='} ${metric.plan.toLocaleString('ru-RU')}`}</span>
+                          <span className="text-gray-400">{`${metric.type || '='} ${formatMetricNumber(metric.plan)}`}</span>
                         )}
                       </td>
                       <td className={`py-4 font-semibold align-top ${percentColor}`}>{formatPercent(percentValue)}</td>
@@ -810,7 +870,7 @@ export function RedCapPage({
                   ) : (
                     <div className="text-center mt-3 space-y-2">
                       <div className={`text-4xl font-bold ${metric.factColor ? factColorClass(metric.factColor) : percentColor}`}>
-                        {metric.fact.toLocaleString('ru-RU')}
+                        {formatMetricNumber(metric.fact)}
                       </div>
                       {metric.factColor && (
                         <div className="flex justify-center">
@@ -818,7 +878,7 @@ export function RedCapPage({
                         </div>
                       )}
                       <div className="text-xs text-gray-500">
-                        План: {metric.type || '='} {metric.plan.toLocaleString('ru-RU')}
+                        План: {metric.type || '='} {formatMetricNumber(metric.plan)}
                       </div>
                     </div>
                   )}
