@@ -3,6 +3,7 @@ import { Save, Plus, Trash2, Eye, EyeOff, Loader2, ArrowLeft, X, RotateCcw } fro
 import { Link, useOutletContext } from 'react-router';
 import { PasswordModal } from '../components/PasswordModal';
 import { dashboardAPI } from '../utils/api';
+import { StandardStabilityWidgetCard, StandardVocWidgetCard } from '../components/RedcapStandardWidgets';
 
 interface OutletContext {
   currentQuarter: string;
@@ -36,6 +37,7 @@ interface RedCapPageProps {
   pageTitle?: string;
   backPath?: string;
   getDefaultDataOverride?: (quarter: string) => any;
+  enableTemplateAdd?: boolean;
 }
 
 interface VocItem {
@@ -53,6 +55,20 @@ interface VocData {
   items: VocItem[];
 }
 
+type ExtraWidget =
+  | {
+      id: string;
+      template: 'voc';
+      title: string;
+      vocData: VocData;
+    }
+  | {
+      id: string;
+      template: 'stability';
+      title: string;
+      metrics: Metric[];
+    };
+
 interface WidgetTitles {
   scoreCard: string;
   stability: string;
@@ -63,6 +79,22 @@ interface WidgetTitles {
   totals: string;
 }
 
+const VOC_TEMPLATE_PREVIEW = {
+  title: 'Название',
+  nib: 0,
+  nibColor: 'green' as const,
+  range: '0-0',
+  items: [
+    { id: 'voc-preview-1', label: 'Название', value: 0, color: 'green' as const },
+    { id: 'voc-preview-2', label: 'Название', value: 0, color: 'green' as const },
+    { id: 'voc-preview-3', label: 'Название', value: 0, color: 'green' as const },
+  ],
+};
+
+const STABILITY_TEMPLATE_PREVIEW = [
+  { id: 1, name: 'Новый показатель', weight: '0 %', fact: 0, plan: 0, type: '=', maxPercent: '∞' as const },
+];
+
 export function RedCapPage({
   loadData: loadDataProp = dashboardAPI.get,
   saveData: saveDataProp = dashboardAPI.save,
@@ -71,6 +103,7 @@ export function RedCapPage({
   pageTitle,
   backPath,
   getDefaultDataOverride,
+  enableTemplateAdd = false,
 }: RedCapPageProps) {
   const { currentQuarter, currentYear, isEditingMode, setIsEditingMode } = useOutletContext<OutletContext>();
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -88,6 +121,12 @@ export function RedCapPage({
   const [deletedWidgets, setDeletedWidgets] = useState<any>({});
   const [purgedWidgets, setPurgedWidgets] = useState<any>({});
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [extraWidgets, setExtraWidgets] = useState<ExtraWidget[]>([]);
+  const [draggedExtraWidgetId, setDraggedExtraWidgetId] = useState<string | null>(null);
+  const [dragOverExtraWidgetId, setDragOverExtraWidgetId] = useState<string | null>(null);
+  const [bottomWidgetOrder, setBottomWidgetOrder] = useState<string[]>(['voc', 'enps', 'visibility']);
+  const [draggedBottomWidgetKey, setDraggedBottomWidgetKey] = useState<string | null>(null);
   const [widgetTitles, setWidgetTitles] = useState<WidgetTitles>({
     scoreCard: 'SCORE-КАРТА',
     stability: 'СТАБИЛЬНОСТЬ/ПРОЕКТЫ',
@@ -295,6 +334,17 @@ export function RedCapPage({
         setHiddenWidgets(sourceData.hiddenWidgets || {});
         setDeletedWidgets(sourceData.deletedWidgets || {});
         setPurgedWidgets(sourceData.purgedWidgets || {});
+        if (enableTemplateAdd) {
+          setExtraWidgets(Array.isArray(sourceData.extraWidgets) ? sourceData.extraWidgets : []);
+          setBottomWidgetOrder(
+            Array.isArray(sourceData.bottomWidgetOrder) && sourceData.bottomWidgetOrder.length > 0
+              ? sourceData.bottomWidgetOrder
+              : ['voc', 'enps', 'visibility'],
+          );
+        } else {
+          setExtraWidgets([]);
+          setBottomWidgetOrder(['voc', 'enps', 'visibility']);
+        }
         initialDataRef.current = {
           digitalMetrics: syncMetrics(sourceData.digitalMetrics || []),
           stabilityMetrics: syncMetrics(sourceData.stabilityMetrics || []),
@@ -307,6 +357,15 @@ export function RedCapPage({
           hiddenWidgets: sourceData.hiddenWidgets || {},
           deletedWidgets: sourceData.deletedWidgets || {},
           purgedWidgets: sourceData.purgedWidgets || {},
+          ...(enableTemplateAdd
+            ? {
+                extraWidgets: Array.isArray(sourceData.extraWidgets) ? sourceData.extraWidgets : [],
+                bottomWidgetOrder:
+                  Array.isArray(sourceData.bottomWidgetOrder) && sourceData.bottomWidgetOrder.length > 0
+                    ? sourceData.bottomWidgetOrder
+                    : ['voc', 'enps', 'visibility'],
+              }
+            : {}),
         };
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
@@ -333,6 +392,7 @@ export function RedCapPage({
         hiddenWidgets,
         deletedWidgets,
         purgedWidgets,
+        ...(enableTemplateAdd ? { extraWidgets, bottomWidgetOrder } : {}),
       };
       const latestRaw = (await loadDataProp(currentQuarter)) || getDefaultData();
       const latestPayload = {
@@ -347,6 +407,15 @@ export function RedCapPage({
         hiddenWidgets: latestRaw.hiddenWidgets || {},
         deletedWidgets: latestRaw.deletedWidgets || {},
         purgedWidgets: latestRaw.purgedWidgets || {},
+        ...(enableTemplateAdd
+          ? {
+              extraWidgets: Array.isArray(latestRaw.extraWidgets) ? latestRaw.extraWidgets : [],
+              bottomWidgetOrder:
+                Array.isArray(latestRaw.bottomWidgetOrder) && latestRaw.bottomWidgetOrder.length > 0
+                  ? latestRaw.bottomWidgetOrder
+                  : ['voc', 'enps', 'visibility'],
+            }
+          : {}),
       };
       const basePayload = initialDataRef.current || localPayload;
       const payload = mergeChangedFields(basePayload, localPayload, latestPayload);
@@ -585,6 +654,66 @@ export function RedCapPage({
       ...prev,
       [widgetName]: true,
     }));
+  };
+
+  const addWidgetFromTemplate = (template: 'voc' | 'stability') => {
+    if (template === 'voc') {
+      setExtraWidgets((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          template: 'voc',
+          title: 'Название',
+          vocData: {
+            nib: 0,
+            nibColor: 'green',
+            range: '0-0',
+            plan: 85,
+            items: [{ id: `voc-item-${Date.now()}`, label: 'Название', value: 0, color: 'green' }],
+          },
+        },
+      ]);
+    } else {
+      setExtraWidgets((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          template: 'stability',
+          title: 'СТАБИЛЬНОСТЬ/ПРОЕКТЫ',
+          metrics: [{ id: 1, name: 'Новый показатель', weight: '0 %', fact: 0, plan: 0, type: '=', maxPercent: '∞', percent: '0 %' }],
+        },
+      ]);
+    }
+    setIsTemplateModalOpen(false);
+  };
+
+  const moveExtraWidget = (fromId: string, toId: string) => {
+    setExtraWidgets((prev) => {
+      const fromIndex = prev.findIndex((item) => item.id === fromId);
+      const toIndex = prev.findIndex((item) => item.id === toId);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const moveBottomWidget = (fromKey: string, toKey: string) => {
+    setBottomWidgetOrder((prev) => {
+      const fromIndex = prev.indexOf(fromKey);
+      const toIndex = prev.indexOf(toKey);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const getBottomWidgetOrder = (key: string) => {
+    const index = bottomWidgetOrder.indexOf(key);
+    return index >= 0 ? index : 999;
   };
 
   const widgetCatalog = [
@@ -1009,7 +1138,22 @@ export function RedCapPage({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {!deletedWidgets.voc && !purgedWidgets.voc && (
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl shadow-black/20 relative flex flex-col">
+            <div
+              draggable={enableTemplateAdd && isEditing}
+              onDragStart={() => setDraggedBottomWidgetKey('voc')}
+              onDragOver={(event) => {
+                if (enableTemplateAdd && isEditing) event.preventDefault();
+              }}
+              onDrop={() => {
+                if (enableTemplateAdd && isEditing && draggedBottomWidgetKey) {
+                  moveBottomWidget(draggedBottomWidgetKey, 'voc');
+                }
+                setDraggedBottomWidgetKey(null);
+              }}
+              onDragEnd={() => setDraggedBottomWidgetKey(null)}
+              style={enableTemplateAdd ? { order: getBottomWidgetOrder('voc') } : undefined}
+              className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl shadow-black/20 relative flex flex-col"
+            >
               {isEditing && (
                 <div className="absolute top-6 right-6 z-50 flex gap-2">
                   <button
@@ -1028,111 +1172,43 @@ export function RedCapPage({
                 </div>
               )}
               <div className={`${hiddenWidgets.voc ? 'opacity-40 blur-[2px] pointer-events-none' : ''} transition-all flex flex-col flex-1`}>
-                <div className="mb-4 pr-24">
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={widgetTitles.voc}
-                      onChange={(e) => setWidgetTitles((prev) => ({ ...prev, voc: e.target.value }))}
-                      className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-xl font-bold text-white"
-                    />
-                  ) : (
-                    <h3 className="text-xl font-bold text-white">{widgetTitles.voc}</h3>
-                  )}
-                </div>
-                
-                {/* Main НИБ Value */}
-                <div className="mb-6 flex flex-col items-start">
-                  {isEditing ? (
-                    <div className="flex items-center gap-2 w-full">
-                      <input type="number" step="0.01" value={vocData.nib}
-                        onChange={(e) => setVocData({...vocData, nib: parseFloat(e.target.value) || 0})}
-                        className={`w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-4xl font-bold ${vocColorClass(vocData.nibColor)}`} />
-                      <button
-                        type="button"
-                        onClick={() => setVocData({ ...vocData, nibColor: cycleVocColor(vocData.nibColor) })}
-                        className={`h-4 w-4 rounded-full border ${vocDotClass(vocData.nibColor)} transition-colors`}
-                        title="Цвет значения НИБ"
-                      />
-                    </div>
-                  ) : (
-                    <div className={`text-4xl font-bold mb-2 ${vocColorClass(vocData.nibColor)}`}>{vocData.nib}</div>
-                  )}
-                  <div className="text-sm text-gray-500">
-                    {isEditing ? (
-                      <input type="text" value={vocData.range}
-                        onChange={(e) => setVocData({...vocData, range: e.target.value})}
-                        className="w-32 bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-white text-sm" />
-                    ) : (
-                      `План ${vocData.range}`
-                    )}
-                  </div>
-                </div>
-
-                {/* Other values in a column */}
-                <div className="space-y-3 mt-auto">
-                  {(vocData.items || []).map((item) => (
-                    <div key={item.id} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={item.label}
-                          onChange={(e) => updateVocItem(item.id, { label: e.target.value })}
-                          className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-sm text-gray-300"
-                          placeholder="Название"
-                        />
-                      ) : (
-                        <div className="text-sm text-gray-500">{item.label}</div>
-                      )}
-                      {isEditing ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={item.value}
-                            onChange={(e) => updateVocItem(item.id, { value: parseFloat(e.target.value) || 0 })}
-                            className={`w-20 bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-sm font-bold ${vocColorClass(item.color)}`}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => updateVocItem(item.id, { color: cycleVocColor(item.color) })}
-                            className={`h-4 w-4 rounded-full border ${vocDotClass(item.color)} transition-colors`}
-                            title="Цвет значения"
-                          />
-                        </div>
-                      ) : (
-                        <div className={`text-lg font-bold ${vocColorClass(item.color)}`}>{item.value}</div>
-                      )}
-                      {isEditing && (
-                        <button
-                          onClick={() => deleteVocItem(item.id)}
-                          className="p-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-all text-red-400"
-                          title="Удалить строку"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {isEditing && (
-                  <div className="mt-4 flex justify-end">
-                    <button
-                      onClick={addVocItem}
-                      disabled={(vocData.items || []).length >= 5}
-                      className="p-2 bg-emerald-500/20 hover:bg-emerald-500/30 rounded-xl transition-all border border-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={(vocData.items || []).length >= 5 ? 'Максимум 5 строк' : 'Добавить строку'}
-                    >
-                      <Plus size={16} className="text-emerald-400" />
-                    </button>
-                  </div>
-                )}
+                <StandardVocWidgetCard
+                  widget={{ ...vocData, title: widgetTitles.voc }}
+                  isEditing={isEditing}
+                  onWidgetChange={(patch) => {
+                    if (typeof patch.title === 'string') {
+                      setWidgetTitles((prev) => ({ ...prev, voc: patch.title as string }));
+                    }
+                    const { title: _title, ...vocPatch } = patch as any;
+                    if (Object.keys(vocPatch).length > 0) {
+                      setVocData((prev) => ({ ...prev, ...vocPatch }));
+                    }
+                  }}
+                  onRowChange={updateVocItem}
+                  onDeleteRow={deleteVocItem}
+                  onAddRow={addVocItem}
+                />
               </div>
             </div>
             )}
 
             {!deletedWidgets.enps && !purgedWidgets.enps && (
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl shadow-black/20 relative flex flex-col">
+            <div
+              draggable={enableTemplateAdd && isEditing}
+              onDragStart={() => setDraggedBottomWidgetKey('enps')}
+              onDragOver={(event) => {
+                if (enableTemplateAdd && isEditing) event.preventDefault();
+              }}
+              onDrop={() => {
+                if (enableTemplateAdd && isEditing && draggedBottomWidgetKey) {
+                  moveBottomWidget(draggedBottomWidgetKey, 'enps');
+                }
+                setDraggedBottomWidgetKey(null);
+              }}
+              onDragEnd={() => setDraggedBottomWidgetKey(null)}
+              style={enableTemplateAdd ? { order: getBottomWidgetOrder('enps') } : undefined}
+              className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl shadow-black/20 relative flex flex-col"
+            >
               {isEditing && (
                 <div className="absolute top-6 right-6 z-50 flex gap-2">
                   <button 
@@ -1178,7 +1254,22 @@ export function RedCapPage({
             )}
 
             {!deletedWidgets.visibility && !purgedWidgets.visibility && (
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl shadow-black/20 relative flex flex-col">
+            <div
+              draggable={enableTemplateAdd && isEditing}
+              onDragStart={() => setDraggedBottomWidgetKey('visibility')}
+              onDragOver={(event) => {
+                if (enableTemplateAdd && isEditing) event.preventDefault();
+              }}
+              onDrop={() => {
+                if (enableTemplateAdd && isEditing && draggedBottomWidgetKey) {
+                  moveBottomWidget(draggedBottomWidgetKey, 'visibility');
+                }
+                setDraggedBottomWidgetKey(null);
+              }}
+              onDragEnd={() => setDraggedBottomWidgetKey(null)}
+              style={enableTemplateAdd ? { order: getBottomWidgetOrder('visibility') } : undefined}
+              className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl shadow-black/20 relative flex flex-col"
+            >
               {isEditing && (
                 <div className="absolute top-6 right-6 z-50 flex gap-2">
                   <button 
@@ -1304,6 +1395,182 @@ export function RedCapPage({
           </div>
           )}
 
+          {enableTemplateAdd && (isEditing || extraWidgets.length > 0) && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {isEditing && (
+                <button
+                  type="button"
+                  onClick={() => setIsTemplateModalOpen(true)}
+                  className="aspect-square rounded-3xl border border-dashed border-white/20 bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/30 transition-all flex items-center justify-center text-center group"
+                >
+                  <div className="flex flex-col items-center gap-5">
+                    <div className="size-16 rounded-2xl border border-white/15 bg-white/10 backdrop-blur-xl flex items-center justify-center group-hover:scale-105 transition-transform">
+                      <Plus size={28} className="text-gray-200" />
+                    </div>
+                    <div className="text-3xl font-semibold text-gray-400 group-hover:text-gray-200 transition-colors">Добавить виджет</div>
+                  </div>
+                </button>
+              )}
+
+              {extraWidgets.map((widget) => (
+                <div
+                  key={widget.id}
+                  draggable={isEditing}
+                  onDragStart={() => {
+                    setDraggedExtraWidgetId(widget.id);
+                    setDragOverExtraWidgetId(null);
+                  }}
+                  onDragEnd={() => {
+                    setDraggedExtraWidgetId(null);
+                    setDragOverExtraWidgetId(null);
+                  }}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDragEnter={() => {
+                    if (draggedExtraWidgetId && draggedExtraWidgetId !== widget.id) {
+                      setDragOverExtraWidgetId(widget.id);
+                    }
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverExtraWidgetId === widget.id) {
+                      setDragOverExtraWidgetId(null);
+                    }
+                  }}
+                  onDrop={() => {
+                    if (draggedExtraWidgetId) moveExtraWidget(draggedExtraWidgetId, widget.id);
+                    setDraggedExtraWidgetId(null);
+                    setDragOverExtraWidgetId(null);
+                  }}
+                  className={`${widget.template === 'stability' ? 'md:col-span-3' : ''} bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl shadow-black/20 relative flex flex-col transition-all ${
+                    draggedExtraWidgetId === widget.id ? 'opacity-80 ring-2 ring-emerald-300/40' : ''
+                  } ${dragOverExtraWidgetId === widget.id ? 'ring-2 ring-emerald-400/50' : ''}`}
+                >
+                  {isEditing && (
+                    <button
+                      onClick={() => setExtraWidgets((prev) => prev.filter((w) => w.id !== widget.id))}
+                      className="absolute top-4 right-16 p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all text-red-400 z-10"
+                      title="Удалить виджет"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                  {isEditing && (
+                    <button
+                      type="button"
+                      className="absolute top-4 right-4 h-9 w-9 rounded-xl border border-white/15 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/25 transition-all z-10 cursor-grab active:cursor-grabbing flex items-center justify-center"
+                      title="Перетащить виджет"
+                    >
+                      <span className="sr-only">Перетащить виджет</span>
+                      <span
+                        className="pointer-events-none h-5 w-[10px] rounded-full"
+                        style={{
+                          backgroundImage: "radial-gradient(circle, rgba(226,232,240,0.78) 1.3px, transparent 1.4px)",
+                          backgroundSize: "8px 10px",
+                          backgroundPosition: "center center",
+                        }}
+                      />
+                    </button>
+                  )}
+                  {widget.template === 'voc' ? (
+                    <StandardVocWidgetCard
+                      widget={{ ...widget.vocData, title: widget.title }}
+                      isEditing={isEditing}
+                      onWidgetChange={(patch) =>
+                        setExtraWidgets((prev) =>
+                          prev.map((w) =>
+                            w.id === widget.id && w.template === 'voc'
+                              ? { ...w, title: typeof patch.title === 'string' ? patch.title : w.title, vocData: { ...w.vocData, ...(patch as any) } }
+                              : w,
+                          ),
+                        )
+                      }
+                      onRowChange={(rowId, patch) =>
+                        setExtraWidgets((prev) =>
+                          prev.map((w) =>
+                            w.id === widget.id && w.template === 'voc'
+                              ? {
+                                  ...w,
+                                  vocData: {
+                                    ...w.vocData,
+                                    items: w.vocData.items.map((item) => (item.id === rowId ? { ...item, ...patch } : item)),
+                                  },
+                                }
+                              : w,
+                          ),
+                        )
+                      }
+                      onDeleteRow={(rowId) =>
+                        setExtraWidgets((prev) =>
+                          prev.map((w) =>
+                            w.id === widget.id && w.template === 'voc'
+                              ? { ...w, vocData: { ...w.vocData, items: w.vocData.items.filter((item) => item.id !== rowId) } }
+                              : w,
+                          ),
+                        )
+                      }
+                      onAddRow={() =>
+                        setExtraWidgets((prev) =>
+                          prev.map((w) =>
+                            w.id === widget.id && w.template === 'voc'
+                              ? {
+                                  ...w,
+                                  vocData: {
+                                    ...w.vocData,
+                                    items: [...w.vocData.items, { id: `voc-item-${Date.now()}`, label: 'Название', value: 0, color: 'green' }],
+                                  },
+                                }
+                              : w,
+                          ),
+                        )
+                      }
+                    />
+                  ) : (
+                    <StandardStabilityWidgetCard
+                      title={widget.title}
+                      metrics={widget.metrics}
+                      isEditing={isEditing}
+                      onTitleChange={(title) =>
+                        setExtraWidgets((prev) => prev.map((w) => (w.id === widget.id && w.template === 'stability' ? { ...w, title } : w)))
+                      }
+                      onMetricChange={(metricId, patch) =>
+                        setExtraWidgets((prev) =>
+                          prev.map((w) =>
+                            w.id === widget.id && w.template === 'stability'
+                              ? { ...w, metrics: w.metrics.map((m) => (m.id === metricId ? { ...m, ...patch } : m)) }
+                              : w,
+                          ),
+                        )
+                      }
+                      onAddMetric={() =>
+                        setExtraWidgets((prev) =>
+                          prev.map((w) =>
+                            w.id === widget.id && w.template === 'stability'
+                              ? {
+                                  ...w,
+                                  metrics: [
+                                    ...w.metrics,
+                                    { id: Date.now(), name: 'Новый показатель', weight: '0 %', fact: 0, plan: 0, type: '=', maxPercent: '∞', percent: '0 %' },
+                                  ],
+                                }
+                              : w,
+                          ),
+                        )
+                      }
+                      onDeleteMetric={(metricId) =>
+                        setExtraWidgets((prev) =>
+                          prev.map((w) =>
+                            w.id === widget.id && w.template === 'stability'
+                              ? { ...w, metrics: w.metrics.filter((m) => m.id !== metricId) }
+                              : w,
+                          ),
+                        )
+                      }
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           {isEditing && (
             <div className="flex justify-center pt-2">
               <button
@@ -1349,6 +1616,50 @@ export function RedCapPage({
         onClose={handlePasswordCancel} 
         onSuccess={handlePasswordSuccess} 
       />
+
+      {enableTemplateAdd && isTemplateModalOpen && (
+        <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-[1200px] rounded-3xl border border-white/10 bg-[#0c0c12] p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-2xl font-bold text-white">Выберите шаблон виджета</h3>
+              <button onClick={() => setIsTemplateModalOpen(false)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="overflow-x-auto pb-2">
+              <div className="grid grid-cols-3 gap-6 min-w-[980px]">
+                <button
+                  onClick={() => addWidgetFromTemplate('voc')}
+                  className="col-span-1 text-left rounded-3xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-all overflow-hidden"
+                >
+                  <StandardVocWidgetCard
+                    widget={VOC_TEMPLATE_PREVIEW}
+                    isEditing={false}
+                    onWidgetChange={() => {}}
+                    onRowChange={() => {}}
+                    onDeleteRow={() => {}}
+                    onAddRow={() => {}}
+                  />
+                </button>
+                <button
+                  onClick={() => addWidgetFromTemplate('stability')}
+                  className="col-span-3 text-left rounded-3xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-all overflow-hidden"
+                >
+                  <StandardStabilityWidgetCard
+                    title="СТАБИЛЬНОСТЬ/ПРОЕКТЫ"
+                    metrics={STABILITY_TEMPLATE_PREVIEW}
+                    isEditing={false}
+                    onTitleChange={() => {}}
+                    onMetricChange={() => {}}
+                    onAddMetric={() => {}}
+                    onDeleteMetric={() => {}}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isTrashModalOpen && (
         <div className="fixed inset-0 z-[130] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">

@@ -18,8 +18,9 @@
 - React Router v7
 - Recharts для графиков
 - Material UI компоненты
-- Supabase (Auth + Database + Real-time)
-- Vercel (Hosting)
+- Supabase (Auth + Database + Real-time, self-hosted)
+- VPS (Production hosting)
+- Vercel (Reserve hosting)
 
 ## Установка для разработки
 
@@ -31,7 +32,7 @@ npm install
 cp .env.example .env
 
 # Добавьте ваши Supabase credentials в .env
-# VITE_SUPABASE_PROJECT_ID=your-project-id
+# VITE_SUPABASE_URL=http://your-vps:8000
 # VITE_SUPABASE_ANON_KEY=your-anon-key
 
 # Запуск в режиме разработки
@@ -41,25 +42,21 @@ npm run dev
 npm run build
 ```
 
-## Деплой на Vercel (Production)
+## Деплой (Production)
 
-### Шаг 1: Подготовка Supabase
+### Шаг 1: VPS + self-hosted Supabase
 
-1. Создайте бесплатный аккаунт на [supabase.com](https://supabase.com)
-2. Создайте новый проект `alpha-business-dashboard`
-3. Выберите регион и установите пароль БД
-4. Скопируйте из Settings -> API:
-   - Project ID
-   - Anon/Public Key
+1. Поднимите Supabase на VPS (например, http://your-vps:8000)
+2. Укажите `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY` в окружении
 
-### Шаг 2: Деплой на Vercel
+### Шаг 2: Vercel (резервный)
 
 1. Перейдите на [vercel.com](https://vercel.com)
 2. Войдите через GitHub
 3. Нажмите "Add New Project"
 4. Импортируйте этот репозиторий
 5. Добавьте Environment Variables:
-   - `VITE_SUPABASE_PROJECT_ID` = ваш Project ID
+   - `VITE_SUPABASE_URL` = URL вашего self-hosted Supabase
    - `VITE_SUPABASE_ANON_KEY` = ваш Anon Key
 6. Нажмите "Deploy"
 

@@ -4,6 +4,10 @@ import { Loader2, Plus, Trash2, X, Save } from "lucide-react";
 import { menuAPI } from "../utils/api";
 import { PasswordModal } from "../components/PasswordModal";
 import { motion, useDragControls } from "framer-motion";
+import {
+  StandardStabilityWidgetCard,
+  StandardVocWidgetCard,
+} from "../components/RedcapStandardWidgets";
 
 interface OutletContext {
   isEditingMode: boolean;
@@ -30,6 +34,7 @@ interface VocItem {
   id: string;
   label: string;
   value: number;
+  color?: "green" | "yellow" | "red";
 }
 
 interface StabilityMetric {
@@ -40,6 +45,8 @@ interface StabilityMetric {
   plan: number;
   type: MetricType;
   maxPercent: string;
+  factColor?: "green" | "yellow" | "red";
+  percentColor?: "green" | "yellow" | "red";
 }
 
 interface VocWidget {
@@ -47,6 +54,7 @@ interface VocWidget {
   templateId: "voc";
   title: string;
   nib: number;
+  nibColor?: "green" | "yellow" | "red";
   range: string;
   items: VocItem[];
   alignment: SingleAlignment;
@@ -82,12 +90,13 @@ const createVocWidget = (): VocWidget => ({
   templateId: "voc",
   title: "Название",
   nib: 0,
+  nibColor: "green",
   range: "0-0",
   alignment: "left",
   items: [
-    { id: crypto.randomUUID(), label: "Название", value: 0 },
-    { id: crypto.randomUUID(), label: "Название", value: 0 },
-    { id: crypto.randomUUID(), label: "Название", value: 0 },
+    { id: crypto.randomUUID(), label: "Название", value: 0, color: "green" },
+    { id: crypto.randomUUID(), label: "Название", value: 0, color: "green" },
+    { id: crypto.randomUUID(), label: "Название", value: 0, color: "green" },
   ],
 });
 
@@ -99,6 +108,8 @@ const createStabilityMetric = (): StabilityMetric => ({
   plan: 0,
   type: "=",
   maxPercent: "∞",
+  factColor: "green",
+  percentColor: "green",
 });
 
 const createStabilityWidget = (): StabilityWidget => ({
@@ -114,12 +125,13 @@ const VOC_TEMPLATE_PREVIEW: VocWidget = {
   templateId: "voc",
   title: "Название",
   nib: 0,
+  nibColor: "green",
   range: "0-0",
   alignment: "left",
   items: [
-    { id: "voc-preview-1", label: "Название", value: 0 },
-    { id: "voc-preview-2", label: "Название", value: 0 },
-    { id: "voc-preview-3", label: "Название", value: 0 },
+    { id: "voc-preview-1", label: "Название", value: 0, color: "green" },
+    { id: "voc-preview-2", label: "Название", value: 0, color: "green" },
+    { id: "voc-preview-3", label: "Название", value: 0, color: "green" },
   ],
 };
 const STABILITY_TEMPLATE_PREVIEW: StabilityWidget = {
@@ -154,6 +166,28 @@ const calculateMetricPercent = (metric: StabilityMetric) => {
 };
 
 const formatPercent = (value: number) => `${value.toFixed(1).replace(".", ",")} %`;
+const formatMetricNumber = (value: number | null | undefined) => {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  return value.toLocaleString("ru-RU");
+};
+const cycleStatusColor = (color?: "green" | "yellow" | "red") => {
+  if (!color) return "green";
+  if (color === "green") return "yellow";
+  if (color === "yellow") return "red";
+  return undefined;
+};
+const statusTextColorClass = (color?: "green" | "yellow" | "red") => {
+  if (color === "green") return "text-green-400";
+  if (color === "yellow") return "text-yellow-400";
+  if (color === "red") return "text-red-400";
+  return "";
+};
+const statusDotClass = (color?: "green" | "yellow" | "red") => {
+  if (color === "green") return "bg-green-400/80 border-green-400";
+  if (color === "yellow") return "bg-yellow-400/80 border-yellow-400";
+  if (color === "red") return "bg-red-400/80 border-red-400";
+  return "bg-white/10 border-white/20";
+};
 
 export function WorkspacePage() {
   const { pageId } = useParams();
@@ -171,6 +205,29 @@ export function WorkspacePage() {
   const dragPreviewTargetRef = useRef<string>("");
   const dropPulseTimerRef = useRef<number | null>(null);
 
+  const normalizeLayout = (input: PageLayout): PageLayout => ({
+    sections: (input.sections || []).map((section) => ({
+      ...section,
+      widgets: (section.widgets || []).map((widget) => {
+        if (widget.templateId === "voc") {
+          return {
+            ...widget,
+            nibColor: widget.nibColor || "green",
+            items: (widget.items || []).map((item) => ({ ...item, color: item.color || "green" })),
+          };
+        }
+        return {
+          ...widget,
+          metrics: (widget.metrics || []).map((metric) => ({
+            ...metric,
+            factColor: metric.factColor || undefined,
+            percentColor: metric.percentColor || undefined,
+          })),
+        };
+      }),
+    })),
+  });
+
   const load = async () => {
     if (!pageId) return;
     setLoading(true);
@@ -178,12 +235,12 @@ export function WorkspacePage() {
       const payload = (await menuAPI.get()) || {};
       const normalized: MenuPayload = payload?.items ? payload : { items: payload };
       const saved = normalized.customPageLayouts?.[pageId];
-      const nextLayout = saved?.sections ? saved : createDefaultLayout();
+      const nextLayout = normalizeLayout(saved?.sections ? saved : createDefaultLayout());
       setLayout(nextLayout);
       baseLayoutRef.current = JSON.parse(JSON.stringify(nextLayout));
     } catch (err) {
       console.error("Failed to load workspace page:", err);
-      const defaultLayout = createDefaultLayout();
+      const defaultLayout = normalizeLayout(createDefaultLayout());
       setLayout(defaultLayout);
       baseLayoutRef.current = JSON.parse(JSON.stringify(defaultLayout));
     } finally {
@@ -271,7 +328,7 @@ export function WorkspacePage() {
       if (widget.items.length >= 5) return widget;
       return {
         ...widget,
-        items: [...widget.items, { id: crypto.randomUUID(), label: "Название", value: 0 }],
+        items: [...widget.items, { id: crypto.randomUUID(), label: "Название", value: 0, color: "green" }],
       };
     });
   };
@@ -654,7 +711,7 @@ export function WorkspacePage() {
                         onDragEnd={(event) => handleMotionDragEnd(event as PointerLikeEvent, { sectionId: section.id, widgetId: widget.id })}
                       >
                         {widget.templateId === "voc" ? (
-                          <VocWidgetCard
+                          <StandardVocWidgetCard
                             widget={widget}
                             isEditing={isEditing}
                             onWidgetChange={(patch) => updateWidget(section.id, widget.id, (prev) => ({ ...(prev as VocWidget), ...patch }))}
@@ -676,10 +733,11 @@ export function WorkspacePage() {
                             onAddRow={() => addVocRow(section.id, widget.id)}
                           />
                         ) : (
-                          <StabilityWidgetCard
-                            widget={widget}
+                          <StandardStabilityWidgetCard
+                            title={widget.title}
+                            metrics={widget.metrics}
                             isEditing={isEditing}
-                            onWidgetTitleChange={(title) =>
+                            onTitleChange={(title) =>
                               updateWidget(section.id, widget.id, (prev) => ({ ...(prev as StabilityWidget), title }))
                             }
                             onMetricChange={(metricId, patch) =>
@@ -698,7 +756,7 @@ export function WorkspacePage() {
                                 return { ...prev, metrics: prev.metrics.filter((metric) => metric.id !== metricId) };
                               })
                             }
-                          />
+                            />
                         )}
                       </DraggableWidgetCard>
                     );
@@ -796,7 +854,7 @@ export function WorkspacePage() {
                   onClick={() => addWidgetFromTemplate("voc")}
                   className="col-span-1 text-left rounded-3xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-all overflow-hidden"
                 >
-                  <VocWidgetCard
+                  <StandardVocWidgetCard
                     widget={VOC_TEMPLATE_PREVIEW}
                     isEditing={false}
                     onWidgetChange={() => {}}
@@ -809,10 +867,11 @@ export function WorkspacePage() {
                   onClick={() => addWidgetFromTemplate("stability")}
                   className="col-span-3 text-left rounded-3xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-all overflow-hidden"
                 >
-                  <StabilityWidgetCard
-                    widget={STABILITY_TEMPLATE_PREVIEW}
+                  <StandardStabilityWidgetCard
+                    title={STABILITY_TEMPLATE_PREVIEW.title}
+                    metrics={STABILITY_TEMPLATE_PREVIEW.metrics}
                     isEditing={false}
-                    onWidgetTitleChange={() => {}}
+                    onTitleChange={() => {}}
                     onMetricChange={() => {}}
                     onAddMetric={() => {}}
                     onDeleteMetric={() => {}}
@@ -855,28 +914,36 @@ function VocWidgetCard({
   onAddRow: () => void;
 }) {
   return (
-    <div className="p-6 relative flex flex-col min-h-[360px]">
+    <div className="p-6 relative flex flex-col">
       {isEditing ? (
         <input
           value={widget.title}
           onChange={(e) => onWidgetChange({ title: e.target.value })}
-          className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-xl font-bold text-white mb-4 pr-28"
+          className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-xl font-bold text-white mb-4 pr-20"
         />
       ) : (
-        <h3 className="text-xl font-bold text-white mb-4 pr-20">{widget.title}</h3>
+        <h3 className="text-xl font-bold text-white mb-4">{widget.title}</h3>
       )}
 
       <div className="mb-6 flex flex-col items-start">
         {isEditing ? (
-          <input
-            type="number"
-            step="0.01"
-            value={widget.nib}
-            onChange={(e) => onWidgetChange({ nib: parseFloat(e.target.value) || 0 })}
-            className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-white text-4xl font-bold"
-          />
+          <div className="flex items-center gap-2 w-full">
+            <input
+              type="number"
+              step="0.01"
+              value={widget.nib}
+              onChange={(e) => onWidgetChange({ nib: parseFloat(e.target.value) || 0 })}
+              className={`w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-4xl font-bold ${statusTextColorClass(widget.nibColor)}`}
+            />
+            <button
+              type="button"
+              onClick={() => onWidgetChange({ nibColor: cycleStatusColor(widget.nibColor) as VocWidget["nibColor"] })}
+              className={`h-4 w-4 rounded-full border ${statusDotClass(widget.nibColor)} transition-colors`}
+              title="Цвет значения НИБ"
+            />
+          </div>
         ) : (
-          <div className="text-4xl font-bold text-green-400 mb-2">{widget.nib}</div>
+          <div className={`text-4xl font-bold mb-2 ${statusTextColorClass(widget.nibColor)}`}>{widget.nib}</div>
         )}
         <div className="text-sm text-gray-500 mt-2">
           {isEditing ? (
@@ -891,9 +958,9 @@ function VocWidgetCard({
         </div>
       </div>
 
-      <div className="space-y-3 mt-auto">
+      <div className="space-y-3">
         {widget.items.map((item) => (
-          <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_minmax(88px,112px)_auto] items-center gap-2">
+          <div key={item.id} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
             {isEditing ? (
               <input
                 value={item.label}
@@ -905,15 +972,23 @@ function VocWidgetCard({
             )}
 
             {isEditing ? (
-              <input
-                type="number"
-                step="0.01"
-                value={item.value}
-                onChange={(e) => onRowChange(item.id, { value: parseFloat(e.target.value) || 0 })}
-                className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-white text-sm font-bold"
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={item.value}
+                  onChange={(e) => onRowChange(item.id, { value: parseFloat(e.target.value) || 0 })}
+                  className={`w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-sm font-bold ${statusTextColorClass(item.color)}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => onRowChange(item.id, { color: cycleStatusColor(item.color) as VocItem["color"] })}
+                  className={`h-4 w-4 rounded-full border ${statusDotClass(item.color)} transition-colors`}
+                  title="Цвет значения"
+                />
+              </div>
             ) : (
-              <div className="text-lg font-bold text-green-400">{item.value}</div>
+              <div className={`text-lg font-bold ${statusTextColorClass(item.color)}`}>{item.value}</div>
             )}
 
             {isEditing && (
@@ -1044,7 +1119,7 @@ function DraggableWidgetCard({
           <button
             type="button"
             onClick={onDelete}
-            className="absolute top-4 right-14 p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all text-red-400 z-50"
+            className="absolute top-4 right-16 p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all text-red-400 z-50"
             title="Удалить виджет"
           >
             <Trash2 size={14} />
@@ -1056,7 +1131,7 @@ function DraggableWidgetCard({
               onDragStart();
               dragControls.start(event, { snapToCursor: true });
             }}
-            className={`absolute inset-y-1 right-1 w-9 rounded-2xl border transition-all z-50 cursor-grab active:cursor-grabbing ${
+            className={`absolute top-4 right-4 h-9 w-9 rounded-xl border transition-all z-50 cursor-grab active:cursor-grabbing flex items-center justify-center ${
               isDragged
                 ? "border-emerald-300/70 bg-emerald-500/20 shadow-[0_0_24px_rgba(16,185,129,0.35)]"
                 : "border-white/15 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/25"
@@ -1065,11 +1140,11 @@ function DraggableWidgetCard({
           >
             <span className="sr-only">Перетащить виджет</span>
             <span
-              className="pointer-events-none absolute inset-y-1 left-1/2 w-[10px] -translate-x-1/2 rounded-full"
+              className="pointer-events-none h-5 w-[10px] rounded-full"
               style={{
                 backgroundImage: "radial-gradient(circle, rgba(226,232,240,0.78) 1.3px, transparent 1.4px)",
                 backgroundSize: "8px 10px",
-                backgroundPosition: "center top",
+                backgroundPosition: "center center",
               }}
             />
           </button>
@@ -1100,10 +1175,10 @@ function StabilityWidgetCard({
         <input
           value={widget.title}
           onChange={(e) => onWidgetTitleChange(e.target.value)}
-          className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-xl font-bold text-white mb-6 pr-28"
+          className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-xl font-bold text-white mb-6 pr-20"
         />
       ) : (
-        <h3 className="text-xl font-bold text-white mb-6 pr-20">{widget.title}</h3>
+        <h3 className="text-xl font-bold text-white mb-6">{widget.title}</h3>
       )}
 
       <div className="overflow-x-auto">
@@ -1153,15 +1228,25 @@ function StabilityWidgetCard({
                   </td>
                   <td className="py-4 align-top">
                     {isEditing ? (
-                      <input
-                        type="number"
-                        step="any"
-                        value={metric.fact}
-                        onChange={(e) => onMetricChange(metric.id, { fact: parseFloat(e.target.value) || 0 })}
-                        className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-1.5 text-white"
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="any"
+                          value={metric.fact}
+                          onChange={(e) => onMetricChange(metric.id, { fact: parseFloat(e.target.value) || 0 })}
+                          className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-1.5 text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => onMetricChange(metric.id, { factColor: cycleStatusColor(metric.factColor) })}
+                          className={`h-4 w-4 rounded-full border ${statusDotClass(metric.factColor)} transition-colors`}
+                          title="Цвет факта"
+                        />
+                      </div>
                     ) : (
-                      <span className={percentColor}>{Number.isFinite(Number(metric.fact)) ? Number(metric.fact).toLocaleString("ru-RU") : "—"}</span>
+                      <span className={metric.factColor ? statusTextColorClass(metric.factColor) : percentColor}>
+                        {formatMetricNumber(metric.fact)}
+                      </span>
                     )}
                   </td>
                   {isEditing && (
@@ -1192,7 +1277,21 @@ function StabilityWidgetCard({
                       <span className="text-gray-400">{`${metric.type} ${metric.plan.toLocaleString("ru-RU")}`}</span>
                     )}
                   </td>
-                  <td className={`py-4 font-semibold align-top ${percentColor}`}>{formatPercent(percentValue)}</td>
+                  <td className="py-4 align-top">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-semibold ${metric.percentColor ? statusTextColorClass(metric.percentColor) : percentColor}`}>
+                        {formatPercent(percentValue)}
+                      </span>
+                      {isEditing && (
+                        <button
+                          type="button"
+                          onClick={() => onMetricChange(metric.id, { percentColor: cycleStatusColor(metric.percentColor) })}
+                          className={`h-4 w-4 rounded-full border ${statusDotClass(metric.percentColor)} transition-colors`}
+                          title="Цвет процента"
+                        />
+                      )}
+                    </div>
+                  </td>
                   {isEditing && (
                     <td className="py-4 align-top">
                       <input
