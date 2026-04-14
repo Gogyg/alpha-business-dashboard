@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useOutletContext } from 'react-router';
 import { Plus, Filter, MessageSquare, Send, Check, X, Edit2, Trash2, Users, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { TeamManagementModal } from '../components/TeamManagementModal';
@@ -47,6 +47,7 @@ export function Goals() {
   const [pendingAction, setPendingAction] = useState<'approve' | 'close' | null>(null);
   const [loading, setLoading] = useState(true);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const baseGoalsRef = useRef<Goal[]>([]);
 
   const [filters, setFilters] = useState({
     stream: '',
@@ -69,7 +70,9 @@ export function Goals() {
       setLoading(true);
       try {
         const result = await goalsAPI.get(currentQuarter);
-        setGoals(result?.goals || []);
+        const loadedGoals = result?.goals || [];
+        setGoals(loadedGoals);
+        baseGoalsRef.current = loadedGoals;
       } catch (err) {
         console.error('Failed to load goals:', err);
       } finally {
@@ -79,15 +82,55 @@ export function Goals() {
     loadData();
   }, [currentQuarter]);
 
+  const isSameData = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
+
+  const mergeGoalsByDiff = (baseGoals: Goal[], localGoals: Goal[], latestGoals: Goal[]) => {
+    const mergedMap = new Map<number, Goal>(latestGoals.map((goal) => [goal.id, goal]));
+    const baseMap = new Map<number, Goal>(baseGoals.map((goal) => [goal.id, goal]));
+    const localMap = new Map<number, Goal>(localGoals.map((goal) => [goal.id, goal]));
+    const ids = new Set<number>([
+      ...Array.from(baseMap.keys()),
+      ...Array.from(localMap.keys()),
+    ]);
+
+    ids.forEach((id) => {
+      const baseGoal = baseMap.get(id);
+      const localGoal = localMap.get(id);
+
+      if (baseGoal && !localGoal) {
+        mergedMap.delete(id);
+        return;
+      }
+
+      if (!baseGoal && localGoal) {
+        mergedMap.set(id, localGoal);
+        return;
+      }
+
+      if (baseGoal && localGoal && !isSameData(baseGoal, localGoal)) {
+        mergedMap.set(id, localGoal);
+      }
+    });
+
+    return Array.from(mergedMap.values()).sort((a, b) => a.id - b.id);
+  };
+
   const saveToSupabase = async (updatedGoals: Goal[]) => {
     try {
-      await goalsAPI.save(currentQuarter, { goals: updatedGoals });
+      const baseGoals = baseGoalsRef.current || [];
+      const latest = await goalsAPI.get(currentQuarter);
+      const latestGoals: Goal[] = latest?.goals || [];
+      const mergedGoals = mergeGoalsByDiff(baseGoals, updatedGoals, latestGoals);
+
+      await goalsAPI.save(currentQuarter, { goals: mergedGoals });
       
       // Mirror to localStorage for Export functionality in Layout
       const stored = localStorage.getItem('goals-data');
       const allData = stored ? JSON.parse(stored) : {};
-      allData[currentQuarter] = { goals: updatedGoals };
+      allData[currentQuarter] = { goals: mergedGoals };
       localStorage.setItem('goals-data', JSON.stringify(allData));
+      setGoals(mergedGoals);
+      baseGoalsRef.current = mergedGoals;
     } catch (err) {
       console.error('Failed to save goals to Supabase:', err);
     }

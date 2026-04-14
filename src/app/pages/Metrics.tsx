@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Save, Eye, EyeOff, Loader2, Trash2 } from 'lucide-react';
 import { useOutletContext } from 'react-router';
 import { ProgressCircle } from '../components/ProgressCircle';
@@ -29,6 +29,7 @@ export function Metrics() {
   const [defects, setDefects] = useState<any[]>([]);
   const [keshp, setKeshp] = useState<any[]>([]);
   const [hiddenWidgets, setHiddenWidgets] = useState<any>({});
+  const initialDataRef = useRef<any>(null);
 
   useEffect(() => {
     if (isEditingMode && !isEditing) {
@@ -37,8 +38,6 @@ export function Metrics() {
       setIsEditing(false);
     }
   }, [isEditingMode]);
-
-  const getCurrentData = () => getDefaultData();
 
   function getDefaultData() {
     const hasData = currentQuarter === 'Q1';
@@ -112,6 +111,41 @@ export function Metrics() {
     };
   }
 
+  const getCurrentFormData = () => ({
+    techStandards,
+    salesStandard,
+    designStandard,
+    planningNext,
+    convergence,
+    t2m,
+    utilization,
+    defects,
+    keshp,
+    hiddenWidgets,
+  });
+
+  const isSameData = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
+
+  const mergeChangedFields = (baseData: any, localData: any, latestData: any) => {
+    const merged: any = {};
+    const keys = new Set([
+      ...Object.keys(baseData || {}),
+      ...Object.keys(localData || {}),
+      ...Object.keys(latestData || {}),
+    ]);
+
+    for (const key of keys) {
+      const localValue = localData?.[key];
+      const baseValue = baseData?.[key];
+      const latestValue = latestData?.[key];
+      const wasChangedLocally = !isSameData(localValue, baseValue);
+
+      merged[key] = wasChangedLocally ? localValue : latestValue;
+    }
+
+    return merged;
+  };
+
   // Initial load and manual save are handled by the useEffect and handleSave functions above.
 
   useEffect(() => {
@@ -131,6 +165,7 @@ export function Metrics() {
         setDefects(sourceData.defects);
         setKeshp(sourceData.keshp);
         setHiddenWidgets(sourceData.hiddenWidgets || {});
+        initialDataRef.current = JSON.parse(JSON.stringify(sourceData));
       } catch (err) {
         console.error('Failed to load metrics:', err);
       } finally {
@@ -141,38 +176,34 @@ export function Metrics() {
   }, [currentQuarter]);
 
   const handleSave = async () => {
-    if (!isEditing) return;
+      if (!isEditing) return;
     try {
       setLoading(true);
-      await metricsAPI.save(currentQuarter, {
-        techStandards,
-        salesStandard,
-        designStandard,
-        planningNext,
-        convergence,
-        t2m,
-        utilization,
-        defects,
-        keshp,
-        hiddenWidgets,
-      });
+      const localData = getCurrentFormData();
+      const baseData = initialDataRef.current || localData;
+      const latestData = (await metricsAPI.get(currentQuarter)) || getDefaultData();
+      const mergedData = mergeChangedFields(baseData, localData, latestData);
+
+      await metricsAPI.save(currentQuarter, mergedData);
 
       // Mirror to localStorage for Export functionality in Layout
       const stored = localStorage.getItem('metrics-data');
       const allData = stored ? JSON.parse(stored) : {};
-      allData[currentQuarter] = {
-        techStandards,
-        salesStandard,
-        designStandard,
-        planningNext,
-        convergence,
-        t2m,
-        utilization,
-        defects,
-        keshp,
-        hiddenWidgets,
-      };
+      allData[currentQuarter] = mergedData;
       localStorage.setItem('metrics-data', JSON.stringify(allData));
+
+      setTechStandards(mergedData.techStandards);
+      setSalesStandard(mergedData.salesStandard);
+      setDesignStandard(mergedData.designStandard);
+      setPlanningNext(mergedData.planningNext);
+      setConvergence(mergedData.convergence);
+      setT2m(mergedData.t2m);
+      setUtilization(mergedData.utilization);
+      setDefects(mergedData.defects);
+      setKeshp(mergedData.keshp);
+      setHiddenWidgets(mergedData.hiddenWidgets || {});
+      initialDataRef.current = JSON.parse(JSON.stringify(mergedData));
+
       setIsEditing(false);
       setIsEditingMode(false);
     } catch (err) {
@@ -216,6 +247,24 @@ export function Metrics() {
   const cycleColor = (current: 'green' | 'yellow' | 'red'): 'green' | 'yellow' | 'red' => {
     const cycle = { green: 'yellow', yellow: 'red', red: 'green' } as const;
     return cycle[current];
+  };
+
+  const getStatusTextColor = (color: 'green' | 'yellow' | 'red') => {
+    const classes = {
+      green: 'text-green-400',
+      yellow: 'text-yellow-300',
+      red: 'text-red-400',
+    };
+    return classes[color];
+  };
+
+  const getStatusTileClass = (color: 'green' | 'yellow' | 'red') => {
+    const classes = {
+      green: 'border-green-500/30 bg-green-500/10',
+      yellow: 'border-yellow-500/30 bg-yellow-500/10',
+      red: 'border-red-500/30 bg-red-500/10',
+    };
+    return classes[color];
   };
 
   if (loading || !techStandards) {
@@ -629,37 +678,24 @@ export function Metrics() {
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   {t2m.map((item: any, index: number) => (
                     <div key={index}>
-                      <div className="relative w-20 h-20 mx-auto">
-                        <svg className="w-full h-full transform -rotate-90">
-                          <circle cx="40" cy="40" r="34" fill="none" stroke="#2a2a2a" strokeWidth="5" />
-                          <circle 
-                            cx="40" 
-                            cy="40" 
-                            r="34" 
-                            fill="none" 
-                            stroke={item.color === 'green' ? '#22c55e' : item.color === 'yellow' ? '#eab308' : '#ef4444'}
-                            strokeWidth="5"
-                            strokeDasharray={`${2 * Math.PI * 34}`}
-                            strokeDashoffset={`${2 * Math.PI * 34 * (1 - item.value / 100)}`}
-                            strokeLinecap="round"
+                      <div className={`h-20 flex items-center justify-center mx-auto rounded-2xl border transition-colors ${getStatusTileClass(item.color)}`}>
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            value={item.value}
+                            onChange={(e) => {
+                              const newValue = parseInt(e.target.value) || 0;
+                              setT2m(
+                                t2m.map((t: any, i: number) =>
+                                  i === index ? { ...t, value: newValue } : t,
+                                ),
+                              );
+                            }}
+                            className={`w-16 bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-2xl font-bold text-center ${getStatusTextColor(item.color)}`}
                           />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          {isEditing ? (
-                            <input type="number" value={item.value}
-                              onChange={(e) => {
-                                const newValue = parseInt(e.target.value) || 0;
-                                setT2m(t2m.map((t: any, i: number) => 
-                                  i === index ? {...t, value: newValue} : t
-                                ));
-                              }}
-                              className="w-12 bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-1 py-0.5 text-white text-lg font-bold text-center" max={100} min={0} />
-                          ) : (
-                            <span className="text-lg font-bold text-white">
-                              {item.value}%
-                            </span>
-                          )}
-                        </div>
+                        ) : (
+                          <span className={`text-3xl font-bold ${getStatusTextColor(item.color)}`}>{item.value}</span>
+                        )}
                       </div>
                       <div className="text-center text-xs text-gray-400 mt-1">{item.name}</div>
                       {isEditing && (

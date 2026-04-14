@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router';
 import { CalendarDays, Loader2, Plus, Save, Trash2 } from 'lucide-react';
 import { Calendar } from '../components/ui/calendar';
@@ -62,6 +62,7 @@ export function EventsDashboard() {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [originalEvents, setOriginalEvents] = useState<EventItem[]>([]);
+  const baseEventsRef = useRef<EventItem[]>([]);
 
   const defaultEvents = useMemo<EventItem[]>(
     () => [
@@ -157,10 +158,12 @@ export function EventsDashboard() {
         });
         setEvents(parsed);
         setOriginalEvents(parsed);
+        baseEventsRef.current = parsed;
       } catch (err) {
         console.error('Failed to load events:', err);
         setEvents(defaultEvents);
         setOriginalEvents(defaultEvents);
+        baseEventsRef.current = defaultEvents;
       } finally {
         setLoading(false);
       }
@@ -210,12 +213,67 @@ export function EventsDashboard() {
     if (!isEditing) return;
     try {
       setLoading(true);
-      const payload = events.map((event) => ({
+      const isSameData = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
+      const toStorageEvent = (event: EventItem) => ({
         ...event,
         date: format(event.date, 'yyyy-MM-dd'),
-      }));
+      });
+      const parseStorageEvents = (rawEvents: any[]): EventItem[] =>
+        rawEvents.map((item: any, index: number) => {
+          const rawDate = typeof item.date === 'string' ? item.date : '';
+          const parsedDate = rawDate
+            ? new Date(`${rawDate}T00:00:00`)
+            : item.date instanceof Date
+              ? item.date
+              : new Date();
+          return {
+            id: typeof item.id === 'number' ? item.id : index + 1,
+            title: item.title || 'Без названия',
+            date: parsedDate,
+            color: item.color || 'emerald',
+            tag: item.tag || 'Событие',
+          } as EventItem;
+        });
+
+      const baseEvents = baseEventsRef.current || [];
+      const latestRaw = await eventsAPI.get();
+      const latestSource = Array.isArray(latestRaw) ? latestRaw : latestRaw?.events;
+      const latestEvents = Array.isArray(latestSource) ? parseStorageEvents(latestSource) : [];
+
+      const mergedMap = new Map<number, EventItem>(latestEvents.map((event) => [event.id, event]));
+      const baseMap = new Map<number, EventItem>(baseEvents.map((event) => [event.id, event]));
+      const localMap = new Map<number, EventItem>(events.map((event) => [event.id, event]));
+
+      const ids = new Set<number>([
+        ...Array.from(baseMap.keys()),
+        ...Array.from(localMap.keys()),
+      ]);
+
+      ids.forEach((id) => {
+        const baseEvent = baseMap.get(id);
+        const localEvent = localMap.get(id);
+
+        if (baseEvent && !localEvent) {
+          mergedMap.delete(id);
+          return;
+        }
+
+        if (!baseEvent && localEvent) {
+          mergedMap.set(id, localEvent);
+          return;
+        }
+
+        if (baseEvent && localEvent && !isSameData(baseEvent, localEvent)) {
+          mergedMap.set(id, localEvent);
+        }
+      });
+
+      const mergedEvents = Array.from(mergedMap.values()).sort((a, b) => a.id - b.id);
+      const payload = mergedEvents.map(toStorageEvent);
       await eventsAPI.save(payload);
-      setOriginalEvents(events);
+      setEvents(mergedEvents);
+      setOriginalEvents(mergedEvents);
+      baseEventsRef.current = mergedEvents;
       setIsEditing(false);
       setIsEditingMode(false);
     } catch (err) {
