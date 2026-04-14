@@ -24,6 +24,7 @@ interface Metric {
   isNew?: boolean;
   hasAlert?: boolean;
   runrate?: string;
+  factColor?: 'green' | 'yellow' | 'red';
 }
 
 interface RedCapPageProps {
@@ -94,15 +95,22 @@ export function RedCapPage({
     totals: 'Итоговые показатели красной шапочки',
   });
 
-  const normalizeMetric = (metric: Metric): Metric => ({
-    ...metric,
-    type: metric.type || '=',
-    maxPercent: metric.maxPercent || '∞',
-  });
+  const normalizeMetric = (metric: Metric): Metric => {
+    const rawMax = typeof metric.maxPercent === 'string' ? metric.maxPercent : '∞';
+    const cleanedMax = rawMax.replace(/\s/g, '').replace(/∞/g, '') || '∞';
+    return {
+      ...metric,
+      type: metric.type || '=',
+      maxPercent: cleanedMax,
+      factColor: metric.factColor,
+    };
+  };
 
   const parseMaxPercent = (value: string | undefined) => {
     if (!value || value === '∞') return Infinity;
-    const numeric = parseFloat(value.replace(',', '.'));
+    const cleaned = value.replace('∞', '').replace(',', '.').trim();
+    if (!cleaned) return Infinity;
+    const numeric = parseFloat(cleaned);
     return Number.isFinite(numeric) ? numeric : Infinity;
   };
 
@@ -341,7 +349,16 @@ export function RedCapPage({
   const handleEditMetric = (setter: any, id: number, field: string, value: any) => {
     setter((prev: Metric[]) => prev.map(metric => {
       if (metric.id === id) {
-        const updated = normalizeMetric({ ...metric, [field]: value });
+        let nextValue = value;
+        if (field === 'maxPercent') {
+          const raw = String(value).replace(/\s/g, '');
+          if (!raw || raw === '∞') {
+            nextValue = '∞';
+          } else {
+            nextValue = raw.replace(/∞/g, '');
+          }
+        }
+        const updated = normalizeMetric({ ...metric, [field]: nextValue });
         if (field === 'fact' || field === 'plan' || field === 'type' || field === 'maxPercent') {
           updated.percent = formatPercent(calculateMetricPercent(updated));
         }
@@ -349,6 +366,27 @@ export function RedCapPage({
       }
       return metric;
     }));
+  };
+
+  const cycleFactColor = (color?: Metric['factColor']) => {
+    if (!color) return 'green';
+    if (color === 'green') return 'yellow';
+    if (color === 'yellow') return 'red';
+    return undefined;
+  };
+
+  const factColorClass = (color?: Metric['factColor']) => {
+    if (color === 'green') return 'text-green-400';
+    if (color === 'yellow') return 'text-yellow-400';
+    if (color === 'red') return 'text-red-400';
+    return '';
+  };
+
+  const factDotClass = (color?: Metric['factColor']) => {
+    if (color === 'green') return 'bg-green-400/80 border-green-400';
+    if (color === 'yellow') return 'bg-yellow-400/80 border-yellow-400';
+    if (color === 'red') return 'bg-red-400/80 border-red-400';
+    return 'bg-white/10 border-white/20';
   };
 
   const addMetric = (setter: any) => {
@@ -564,15 +602,32 @@ export function RedCapPage({
                       </td>
                       <td className="py-4 align-top">
                         {isEditing ? (
-                          <input
-                            type="number"
-                            step="any"
-                            value={metric.fact}
-                            onChange={(e) => handleEditMetric(setter, metric.id, 'fact', parseFloat(e.target.value))}
-                            className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-1.5 text-white"
-                          />
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              step="any"
+                              value={metric.fact}
+                              onChange={(e) => handleEditMetric(setter, metric.id, 'fact', parseFloat(e.target.value))}
+                              className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-1.5 text-white"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleEditMetric(setter, metric.id, 'factColor', cycleFactColor(metric.factColor))
+                              }
+                              className={`h-4 w-4 rounded-full border ${factDotClass(metric.factColor)} transition-colors`}
+                              title="Цвет факта"
+                            />
+                          </div>
                         ) : (
-                          <span className={percentColor}>{metric.fact.toLocaleString('ru-RU')}</span>
+                          <div className="flex items-center gap-2">
+                            <span className={metric.factColor ? factColorClass(metric.factColor) : percentColor}>
+                              {metric.fact.toLocaleString('ru-RU')}
+                            </span>
+                            {metric.factColor && (
+                              <span className={`h-3 w-3 rounded-full border ${factDotClass(metric.factColor)}`} />
+                            )}
+                          </div>
                         )}
                       </td>
                       {isEditing && (
@@ -684,13 +739,23 @@ export function RedCapPage({
                       </div>
                       <div>
                         <span className="text-gray-500 text-xs">Факт</span>
-                        <input
-                          type="number"
-                          step="any"
-                          value={metric.fact}
-                          onChange={(e) => handleEditMetric(setter, metric.id, 'fact', parseFloat(e.target.value))}
-                          className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-white"
-                        />
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            step="any"
+                            value={metric.fact}
+                            onChange={(e) => handleEditMetric(setter, metric.id, 'fact', parseFloat(e.target.value))}
+                            className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleEditMetric(setter, metric.id, 'factColor', cycleFactColor(metric.factColor))
+                            }
+                            className={`h-4 w-4 rounded-full border ${factDotClass(metric.factColor)} transition-colors`}
+                            title="Цвет факта"
+                          />
+                        </div>
                       </div>
                       <div>
                         <span className="text-gray-500 text-xs">План</span>
@@ -744,9 +809,14 @@ export function RedCapPage({
                     </div>
                   ) : (
                     <div className="text-center mt-3 space-y-2">
-                      <div className={`text-4xl font-bold ${percentColor}`}>
+                      <div className={`text-4xl font-bold ${metric.factColor ? factColorClass(metric.factColor) : percentColor}`}>
                         {metric.fact.toLocaleString('ru-RU')}
                       </div>
+                      {metric.factColor && (
+                        <div className="flex justify-center">
+                          <span className={`h-3 w-3 rounded-full border ${factDotClass(metric.factColor)}`} />
+                        </div>
+                      )}
                       <div className="text-xs text-gray-500">
                         План: {metric.type || '='} {metric.plan.toLocaleString('ru-RU')}
                       </div>
