@@ -108,6 +108,7 @@ export function KshCdpoDashboard() {
       pageTitle={dashboardTitle}
       backPath="/ksh-cdpo"
       getDefaultDataOverride={createBlankRedcapData}
+      enableTemplateAdd
     />
   );
 }
