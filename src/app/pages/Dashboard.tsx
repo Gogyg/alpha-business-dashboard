@@ -25,6 +25,7 @@ interface Metric {
   hasAlert?: boolean;
   runrate?: string;
   factColor?: 'green' | 'yellow' | 'red';
+  percentColor?: 'green' | 'yellow' | 'red';
 }
 
 interface RedCapPageProps {
@@ -41,10 +42,12 @@ interface VocItem {
   id: string;
   label: string;
   value: number;
+  color?: 'green' | 'yellow' | 'red';
 }
 
 interface VocData {
   nib: number;
+  nibColor?: 'green' | 'yellow' | 'red';
   range: string;
   plan: number;
   items: VocItem[];
@@ -106,6 +109,7 @@ export function RedCapPage({
       type: metric.type || '=',
       maxPercent: cleanedMax,
       factColor: metric.factColor,
+      percentColor: metric.percentColor,
     };
   };
 
@@ -175,20 +179,27 @@ export function RedCapPage({
           id: String(item?.id || `voc-item-${index + 1}`),
           label: typeof item?.label === 'string' && item.label.trim() ? item.label : `Строка ${index + 1}`,
           value: Number.isFinite(Number(item?.value)) ? Number(item.value) : 0,
+          color: item?.color === 'yellow' || item?.color === 'red' ? item.color : 'green',
         }))
       : null;
 
     if (normalizedItems && normalizedItems.length > 0) {
-      return { nib, range, plan, items: normalizedItems };
+      return {
+        nib,
+        nibColor: raw?.nibColor === 'yellow' || raw?.nibColor === 'red' ? raw.nibColor : 'green',
+        range,
+        plan,
+        items: normalizedItems,
+      };
     }
 
     const legacyItems: VocItem[] = [
-      { id: 'voc-mmb', label: 'ММБ', value: Number.isFinite(Number(raw?.mmb)) ? Number(raw.mmb) : 0 },
-      { id: 'voc-sb', label: 'СБ', value: Number.isFinite(Number(raw?.sb)) ? Number(raw.sb) : 0 },
-      { id: 'voc-kib', label: 'КИБ', value: Number.isFinite(Number(raw?.kib)) ? Number(raw.kib) : 0 },
+      { id: 'voc-mmb', label: 'ММБ', value: Number.isFinite(Number(raw?.mmb)) ? Number(raw.mmb) : 0, color: 'green' },
+      { id: 'voc-sb', label: 'СБ', value: Number.isFinite(Number(raw?.sb)) ? Number(raw.sb) : 0, color: 'green' },
+      { id: 'voc-kib', label: 'КИБ', value: Number.isFinite(Number(raw?.kib)) ? Number(raw.kib) : 0, color: 'green' },
     ];
 
-    return { nib, range, plan, items: legacyItems };
+    return { nib, nibColor: 'green', range, plan, items: legacyItems };
   };
 
   function getDefaultWidgetTitles(): WidgetTitles {
@@ -241,12 +252,13 @@ export function RedCapPage({
       ],
       vocData: {
         nib: hasData ? 4.76 : 0,
+        nibColor: 'green',
         range: '4.75-4.78',
         plan: 85,
         items: [
-          { id: 'voc-mmb', label: 'ММБ', value: hasData ? 4.76 : 0 },
-          { id: 'voc-sb', label: 'СБ', value: hasData ? 4.76 : 0 },
-          { id: 'voc-kib', label: 'КИБ', value: hasData ? 4.76 : 0 },
+          { id: 'voc-mmb', label: 'ММБ', value: hasData ? 4.76 : 0, color: 'green' },
+          { id: 'voc-sb', label: 'СБ', value: hasData ? 4.76 : 0, color: 'green' },
+          { id: 'voc-kib', label: 'КИБ', value: hasData ? 4.76 : 0, color: 'green' },
         ],
       },
       enpsData: { value: hasData ? 98 : 0, plan: 85 },
@@ -428,7 +440,7 @@ export function RedCapPage({
     }));
   };
 
-  const cycleFactColor = (color?: Metric['factColor']) => {
+  const cycleColor = (color?: Metric['factColor']) => {
     if (!color) return 'green';
     if (color === 'green') return 'yellow';
     if (color === 'yellow') return 'red';
@@ -447,6 +459,38 @@ export function RedCapPage({
     if (color === 'yellow') return 'bg-yellow-400/80 border-yellow-400';
     if (color === 'red') return 'bg-red-400/80 border-red-400';
     return 'bg-white/10 border-white/20';
+  };
+
+  const percentColorClass = (color?: Metric['percentColor']) => {
+    if (color === 'green') return 'text-green-400';
+    if (color === 'yellow') return 'text-yellow-400';
+    if (color === 'red') return 'text-red-400';
+    return '';
+  };
+
+  const percentDotClass = (color?: Metric['percentColor']) => {
+    if (color === 'green') return 'bg-green-400/80 border-green-400';
+    if (color === 'yellow') return 'bg-yellow-400/80 border-yellow-400';
+    if (color === 'red') return 'bg-red-400/80 border-red-400';
+    return 'bg-white/10 border-white/20';
+  };
+
+  const vocColorClass = (color?: 'green' | 'yellow' | 'red') => {
+    if (color === 'yellow') return 'text-yellow-400';
+    if (color === 'red') return 'text-red-400';
+    return 'text-green-400';
+  };
+
+  const vocDotClass = (color?: 'green' | 'yellow' | 'red') => {
+    if (color === 'yellow') return 'bg-yellow-400/80 border-yellow-400';
+    if (color === 'red') return 'bg-red-400/80 border-red-400';
+    return 'bg-green-400/80 border-green-400';
+  };
+
+  const cycleVocColor = (color?: 'green' | 'yellow' | 'red'): 'green' | 'yellow' | 'red' => {
+    if (color === 'green') return 'yellow';
+    if (color === 'yellow') return 'red';
+    return 'green';
   };
 
   const addMetric = (setter: any) => {
@@ -478,6 +522,7 @@ export function RedCapPage({
             id: `voc-item-${Date.now()}`,
             label: `Строка ${items.length + 1}`,
             value: 0,
+            color: 'green',
           },
         ],
       };
@@ -673,7 +718,7 @@ export function RedCapPage({
                             <button
                               type="button"
                               onClick={() =>
-                                handleEditMetric(setter, metric.id, 'factColor', cycleFactColor(metric.factColor))
+                                handleEditMetric(setter, metric.id, 'factColor', cycleColor(metric.factColor))
                               }
                               className={`h-4 w-4 rounded-full border ${factDotClass(metric.factColor)} transition-colors`}
                               title="Цвет факта"
@@ -684,9 +729,6 @@ export function RedCapPage({
                             <span className={metric.factColor ? factColorClass(metric.factColor) : percentColor}>
                               {formatMetricNumber(metric.fact)}
                             </span>
-                            {metric.factColor && (
-                              <span className={`h-3 w-3 rounded-full border ${factDotClass(metric.factColor)}`} />
-                            )}
                           </div>
                         )}
                       </td>
@@ -718,7 +760,23 @@ export function RedCapPage({
                           <span className="text-gray-400">{`${metric.type || '='} ${formatMetricNumber(metric.plan)}`}</span>
                         )}
                       </td>
-                      <td className={`py-4 font-semibold align-top ${percentColor}`}>{formatPercent(percentValue)}</td>
+                      <td className="py-4 align-top">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-semibold ${metric.percentColor ? percentColorClass(metric.percentColor) : percentColor}`}>
+                            {formatPercent(percentValue)}
+                          </span>
+                          {isEditing && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleEditMetric(setter, metric.id, 'percentColor', cycleColor(metric.percentColor))
+                              }
+                              className={`h-4 w-4 rounded-full border ${percentDotClass(metric.percentColor)} transition-colors`}
+                              title="Цвет процента"
+                            />
+                          )}
+                        </div>
+                      </td>
                       {isEditing && (
                         <td className="py-4 align-top">
                           <input
@@ -810,7 +868,7 @@ export function RedCapPage({
                           <button
                             type="button"
                             onClick={() =>
-                              handleEditMetric(setter, metric.id, 'factColor', cycleFactColor(metric.factColor))
+                              handleEditMetric(setter, metric.id, 'factColor', cycleColor(metric.factColor))
                             }
                             className={`h-4 w-4 rounded-full border ${factDotClass(metric.factColor)} transition-colors`}
                             title="Цвет факта"
@@ -829,7 +887,19 @@ export function RedCapPage({
                       </div>
                       <div>
                         <span className="text-gray-500 text-xs">%</span>
-                        <div className={`font-semibold ${percentColor} px-2 py-1`}>{formatPercent(percentValue)}</div>
+                        <div className="flex items-center gap-2 px-2 py-1">
+                          <div className={`font-semibold ${metric.percentColor ? percentColorClass(metric.percentColor) : percentColor}`}>
+                            {formatPercent(percentValue)}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleEditMetric(setter, metric.id, 'percentColor', cycleColor(metric.percentColor))
+                            }
+                            className={`h-4 w-4 rounded-full border ${percentDotClass(metric.percentColor)} transition-colors`}
+                            title="Цвет процента"
+                          />
+                        </div>
                       </div>
                       <div>
                         <span className="text-gray-500 text-xs">Тип</span>
@@ -872,11 +942,9 @@ export function RedCapPage({
                       <div className={`text-4xl font-bold ${metric.factColor ? factColorClass(metric.factColor) : percentColor}`}>
                         {formatMetricNumber(metric.fact)}
                       </div>
-                      {metric.factColor && (
-                        <div className="flex justify-center">
-                          <span className={`h-3 w-3 rounded-full border ${factDotClass(metric.factColor)}`} />
-                        </div>
-                      )}
+                      <div className={`text-base font-semibold ${metric.percentColor ? percentColorClass(metric.percentColor) : percentColor}`}>
+                        {formatPercent(percentValue)}
+                      </div>
                       <div className="text-xs text-gray-500">
                         План: {metric.type || '='} {formatMetricNumber(metric.plan)}
                       </div>
@@ -976,11 +1044,19 @@ export function RedCapPage({
                 {/* Main НИБ Value */}
                 <div className="mb-6 flex flex-col items-start">
                   {isEditing ? (
-                    <input type="number" step="0.01" value={vocData.nib} 
-                      onChange={(e) => setVocData({...vocData, nib: parseFloat(e.target.value) || 0})}
-                      className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-white text-4xl font-bold" />
+                    <div className="flex items-center gap-2 w-full">
+                      <input type="number" step="0.01" value={vocData.nib}
+                        onChange={(e) => setVocData({...vocData, nib: parseFloat(e.target.value) || 0})}
+                        className={`w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-3 py-2 text-4xl font-bold ${vocColorClass(vocData.nibColor)}`} />
+                      <button
+                        type="button"
+                        onClick={() => setVocData({ ...vocData, nibColor: cycleVocColor(vocData.nibColor) })}
+                        className={`h-4 w-4 rounded-full border ${vocDotClass(vocData.nibColor)} transition-colors`}
+                        title="Цвет значения НИБ"
+                      />
+                    </div>
                   ) : (
-                    <div className="text-4xl font-bold text-green-400 mb-2">{vocData.nib}</div>
+                    <div className={`text-4xl font-bold mb-2 ${vocColorClass(vocData.nibColor)}`}>{vocData.nib}</div>
                   )}
                   <div className="text-sm text-gray-500">
                     {isEditing ? (
@@ -1009,15 +1085,23 @@ export function RedCapPage({
                         <div className="text-sm text-gray-500">{item.label}</div>
                       )}
                       {isEditing ? (
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={item.value}
-                          onChange={(e) => updateVocItem(item.id, { value: parseFloat(e.target.value) || 0 })}
-                          className="w-20 bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-white text-sm font-bold"
-                        />
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={item.value}
+                            onChange={(e) => updateVocItem(item.id, { value: parseFloat(e.target.value) || 0 })}
+                            className={`w-20 bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-sm font-bold ${vocColorClass(item.color)}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => updateVocItem(item.id, { color: cycleVocColor(item.color) })}
+                            className={`h-4 w-4 rounded-full border ${vocDotClass(item.color)} transition-colors`}
+                            title="Цвет значения"
+                          />
+                        </div>
                       ) : (
-                        <div className="text-lg font-bold text-green-400">{item.value}</div>
+                        <div className={`text-lg font-bold ${vocColorClass(item.color)}`}>{item.value}</div>
                       )}
                       {isEditing && (
                         <button
