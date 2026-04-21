@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useOutletContext } from 'react-router';
-import { Loader2, Plus, Trash2, X, Settings, FileUp } from 'lucide-react';
+import { CalendarDays, Loader2, Plus, Trash2, X, Settings, FileUp } from 'lucide-react';
+import { format } from 'date-fns';
+import { ru } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/dashboard_new/ui/card';
 import { Button } from '../components/dashboard_new/ui/button';
+import { Calendar } from '../components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { PasswordModal } from '../components/PasswordModal';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import {
@@ -72,6 +76,32 @@ const getTodayKey = () => {
 const toPackagePath = (file: File) => {
   const customPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
   return (customPath && customPath.trim()) || file.name;
+};
+
+const parseDateInputValue = (value: string | null | undefined) => {
+  if (!value) return null;
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+};
+
+const formatPickerDateLabel = (value: string | null | undefined) => {
+  const parsed = parseDateInputValue(value);
+  if (!parsed) return 'Выберите дату';
+  return format(parsed, 'dd.MM.yyyy');
+};
+
+const modalCalendarClassNames = {
+  months: 'flex flex-col gap-2',
+  month: 'flex flex-col gap-2',
+  caption_label: 'text-sm font-semibold text-white',
+  head_cell: 'w-9 text-[10px] font-semibold uppercase text-gray-400',
+  row: 'mt-1 flex w-full',
+  day: 'h-9 w-9 rounded-md p-0 text-sm font-semibold text-gray-200 hover:bg-white/10 hover:text-white',
+  day_today: 'border border-white/20 bg-white/5 text-white',
+  day_selected: 'bg-emerald-600 text-white hover:bg-emerald-500',
+  day_outside: 'text-gray-600 opacity-50',
+  nav_button: 'h-7 w-7 border border-white/10 bg-white/5 p-0 text-gray-200 hover:bg-white/10',
 };
 
 export function PresentationsPage() {
@@ -306,12 +336,30 @@ export function PresentationsPage() {
                         onChange={(event) => handleEditTitle(item.id, event.target.value)}
                         className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-xl font-bold text-center focus:border-[#34d399] outline-none transition-all"
                       />
-                      <input
-                        type="date"
-                        value={item.eventDate || ''}
-                        onChange={(event) => handleEditEventDate(item.id, event.target.value || null)}
-                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-sm text-center focus:border-[#34d399] outline-none transition-all"
-                      />
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white transition-all hover:border-[#34d399]/60"
+                          >
+                            <span>{formatPickerDateLabel(item.eventDate)}</span>
+                            <CalendarDays size={16} className="text-gray-400" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" className="z-[160] w-auto border border-white/10 bg-[#141821] p-2">
+                          <Calendar
+                            mode="single"
+                            locale={ru}
+                            selected={parseDateInputValue(item.eventDate) ?? undefined}
+                            onSelect={(date) => {
+                              if (!date) return;
+                              handleEditEventDate(item.id, format(date, 'yyyy-MM-dd'));
+                            }}
+                            className="p-0"
+                            classNames={modalCalendarClassNames}
+                          />
+                        </PopoverContent>
+                      </Popover>
                       <label className="flex items-center justify-center gap-2 text-sm text-gray-300">
                         <input
                           type="checkbox"
@@ -392,12 +440,30 @@ export function PresentationsPage() {
                             onChange={(event) => handleEditTitle(item.id, event.target.value)}
                             className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-xl font-bold text-center focus:border-[#34d399] outline-none transition-all"
                           />
-                          <input
-                            type="date"
-                            value={item.eventDate || ''}
-                            onChange={(event) => handleEditEventDate(item.id, event.target.value || null)}
-                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-sm text-center focus:border-[#34d399] outline-none transition-all"
-                          />
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white transition-all hover:border-[#34d399]/60"
+                              >
+                                <span>{formatPickerDateLabel(item.eventDate)}</span>
+                                <CalendarDays size={16} className="text-gray-400" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent align="start" className="z-[160] w-auto border border-white/10 bg-[#141821] p-2">
+                              <Calendar
+                                mode="single"
+                                locale={ru}
+                                selected={parseDateInputValue(item.eventDate) ?? undefined}
+                                onSelect={(date) => {
+                                  if (!date) return;
+                                  handleEditEventDate(item.id, format(date, 'yyyy-MM-dd'));
+                                }}
+                                className="p-0"
+                                classNames={modalCalendarClassNames}
+                              />
+                            </PopoverContent>
+                          </Popover>
                           <label className="flex items-center justify-center gap-2 text-sm text-gray-300">
                             <input
                               type="checkbox"
@@ -483,12 +549,30 @@ export function PresentationsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium text-gray-300 block mb-2">Дата проведения</label>
-                <input
-                  type="date"
-                  value={newEventDate}
-                  onChange={(event) => setNewEventDate(event.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#34d399] outline-none transition-all"
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-left text-sm text-white transition-all hover:border-[#34d399]/60"
+                    >
+                      <span>{formatPickerDateLabel(newEventDate)}</span>
+                      <CalendarDays size={16} className="text-gray-400" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="z-[160] w-auto border border-white/10 bg-[#141821] p-2">
+                    <Calendar
+                      mode="single"
+                      locale={ru}
+                      selected={parseDateInputValue(newEventDate) ?? undefined}
+                      onSelect={(date) => {
+                        if (!date) return;
+                        setNewEventDate(format(date, 'yyyy-MM-dd'));
+                      }}
+                      className="p-0"
+                      classNames={modalCalendarClassNames}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="flex items-end pb-3">
                 <label className="flex items-center gap-2 text-gray-300">
