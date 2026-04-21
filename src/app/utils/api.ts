@@ -369,3 +369,192 @@ export const kshCdpoAPI = {
     return { success: true };
   }
 };
+
+export interface PresentationPagePayload {
+  id: string;
+  fileName: string;
+  htmlContent: string;
+}
+
+export interface PresentationAssetPayload {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  encoding: 'base64' | 'text';
+  content: string;
+}
+
+export interface PresentationPackagePayload {
+  id: string;
+  title: string;
+  eventDate: string | null;
+  isRecurring: boolean;
+  createdAt: string;
+  updatedAt: string;
+  pages: PresentationPagePayload[];
+  assets: PresentationAssetPayload[];
+}
+
+const PRESENTATIONS_STORAGE_KEY = 'global_presentations_packages_v1';
+
+const readPresentationsFromStorage = (): PresentationPackagePayload[] => {
+  try {
+    const raw = localStorage.getItem(PRESENTATIONS_STORAGE_KEY);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter((item) => item && typeof item.id === 'string' && typeof item.title === 'string')
+      .map((item) => ({
+        id: item.id,
+        title: item.title,
+        eventDate: typeof item.eventDate === 'string' && item.eventDate.trim() ? item.eventDate : null,
+        isRecurring: Boolean(item.isRecurring),
+        createdAt: item.createdAt || new Date().toISOString(),
+        updatedAt: item.updatedAt || new Date().toISOString(),
+        pages: Array.isArray(item.pages)
+          ? item.pages
+              .filter((page: any) => page && typeof page.id === 'string' && typeof page.fileName === 'string')
+              .map((page: any) => ({
+                id: page.id,
+                fileName: page.fileName,
+                htmlContent: typeof page.htmlContent === 'string' ? page.htmlContent : '',
+              }))
+          : [],
+        assets: Array.isArray(item.assets)
+          ? item.assets
+              .filter((asset: any) => asset && typeof asset.id === 'string' && typeof asset.fileName === 'string')
+              .map((asset: any) => ({
+                id: asset.id,
+                fileName: asset.fileName,
+                mimeType: asset.mimeType || 'application/octet-stream',
+                encoding: asset.encoding === 'text' ? 'text' : 'base64',
+                content: typeof asset.content === 'string' ? asset.content : '',
+              }))
+          : [],
+      }));
+  } catch (err) {
+    console.error('Failed to parse presentations from localStorage:', err);
+    return [];
+  }
+};
+
+const writePresentationsToStorage = (items: PresentationPackagePayload[]) => {
+  localStorage.setItem(PRESENTATIONS_STORAGE_KEY, JSON.stringify(items));
+};
+
+// Presentations API (local fallback for development; switch to Supabase Storage in production rollout).
+export const presentationsAPI = {
+  getAll: async () => {
+    const items = readPresentationsFromStorage().sort((a, b) => {
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+    return items;
+  },
+  getById: async (id: string) => {
+    const items = readPresentationsFromStorage();
+    return items.find((item) => item.id === id) || null;
+  },
+  create: async (payload: {
+    title: string;
+    eventDate: string | null;
+    isRecurring: boolean;
+    pages: PresentationPagePayload[];
+    assets: PresentationAssetPayload[];
+  }) => {
+    const now = new Date().toISOString();
+    const next: PresentationPackagePayload = {
+      id: crypto.randomUUID(),
+      title: payload.title,
+      eventDate: payload.eventDate,
+      isRecurring: payload.isRecurring,
+      createdAt: now,
+      updatedAt: now,
+      pages: payload.pages,
+      assets: payload.assets,
+    };
+
+    const items = readPresentationsFromStorage();
+    writePresentationsToStorage([next, ...items]);
+    return next;
+  },
+  updateTitle: async (id: string, title: string) => {
+    const items = readPresentationsFromStorage();
+    const updated = items.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            title,
+            updatedAt: new Date().toISOString(),
+          }
+        : item,
+    );
+    writePresentationsToStorage(updated);
+    return { success: true };
+  },
+  updateMeta: async (id: string, payload: { title: string; eventDate: string | null; isRecurring: boolean }) => {
+    const items = readPresentationsFromStorage();
+    const updated = items.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            title: payload.title,
+            eventDate: payload.eventDate,
+            isRecurring: payload.isRecurring,
+            updatedAt: new Date().toISOString(),
+          }
+        : item,
+    );
+    writePresentationsToStorage(updated);
+    return { success: true };
+  },
+  delete: async (id: string) => {
+    const items = readPresentationsFromStorage();
+    writePresentationsToStorage(items.filter((item) => item.id !== id));
+    return { success: true };
+  },
+  updatePagesOrder: async (id: string, orderedPageIds: string[]) => {
+    const items = readPresentationsFromStorage();
+    const updated = items.map((item) => {
+      if (item.id !== id) return item;
+
+      const pagesById = new Map(item.pages.map((page) => [page.id, page]));
+      const nextPages = orderedPageIds
+        .map((pageId) => pagesById.get(pageId))
+        .filter((page): page is PresentationPagePayload => Boolean(page));
+
+      // Preserve any pages missing from payload at the end (safety for stale UI state).
+      const existingIds = new Set(nextPages.map((page) => page.id));
+      const tail = item.pages.filter((page) => !existingIds.has(page.id));
+
+      return {
+        ...item,
+        pages: [...nextPages, ...tail],
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    writePresentationsToStorage(updated);
+    return { success: true };
+  },
+  updatePackageContent: async (
+    id: string,
+    payload: { pages: PresentationPagePayload[]; assets: PresentationAssetPayload[] },
+  ) => {
+    const items = readPresentationsFromStorage();
+    const updated = items.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            pages: payload.pages,
+            assets: payload.assets,
+            updatedAt: new Date().toISOString(),
+          }
+        : item,
+    );
+    writePresentationsToStorage(updated);
+    return { success: true };
+  },
+};

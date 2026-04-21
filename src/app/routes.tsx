@@ -6,6 +6,8 @@ import { Goals } from "./pages/Goals";
 import { EventsDashboard } from "./pages/EventsDashboard";
 import { KshCdpoPage } from "./pages/KshCdpoPage";
 import { KshCdpoDashboard } from "./pages/KshCdpoDashboard";
+import { PresentationsPage } from "./pages/PresentationsPage";
+import { PresentationPackagePage } from "./pages/PresentationPackagePage";
 import { WorkspacePage } from "./pages/WorkspacePage";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
@@ -45,6 +47,8 @@ export const router = createBrowserRouter([
       { path: "goals", Component: Goals },
       { path: "ksh-cdpo", Component: KshCdpoPage },
       { path: "ksh-cdpo/:dashboardId", Component: KshCdpoDashboard },
+      { path: "presentations", Component: PresentationsPage },
+      { path: "presentations/:presentationId", Component: PresentationPackagePage },
       { path: "workspace/:pageId", Component: WorkspacePage },
     ],
   },

@@ -7,7 +7,7 @@ import { authAPI, getCurrentUser, goalsAPI, menuAPI } from '../utils/api';
 import { PasswordModal } from './PasswordModal';
 
 interface MenuItemConfig {
-  id: 'scorecard' | 'events' | 'metrics' | 'goals' | 'ksh-cdpo';
+  id: 'scorecard' | 'events' | 'metrics' | 'goals' | 'ksh-cdpo' | 'presentations';
   label: string;
   hidden?: boolean;
   order: number;
@@ -31,6 +31,7 @@ const DEFAULT_MENU: MenuItemConfig[] = [
   { id: 'metrics', label: 'Важные метрики', order: 3 },
   { id: 'goals', label: 'Цели квартала', order: 4 },
   { id: 'ksh-cdpo', label: 'КШ CDPO', order: 5 },
+  { id: 'presentations', label: 'Презентации', order: 6 },
 ];
 
 const MENU_META = {
@@ -39,6 +40,7 @@ const MENU_META = {
   metrics: { path: '/metrics', icon: BarChart3 },
   goals: { path: '/goals', icon: Goal },
   'ksh-cdpo': { path: '/ksh-cdpo', icon: TrendingUp },
+  presentations: { path: '/presentations', icon: FileText },
 };
 
 const normalizeMenuPayload = (raw: any): { items: MenuItemConfig[]; customPages: CustomPageConfig[] } => {
@@ -71,6 +73,8 @@ const normalizeMenuPayload = (raw: any): { items: MenuItemConfig[]; customPages:
 export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const isPresentationViewer =
+    location.pathname.startsWith('/presentations/') && location.pathname !== '/presentations';
   const [currentQuarter, setCurrentQuarter] = useState(() => {
     const month = new Date().getMonth();
     return `Q${Math.floor(month / 3) + 1}`;
@@ -95,12 +99,14 @@ export function Layout() {
   const isMenuPathActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
     if (path === '/ksh-cdpo') return location.pathname.startsWith('/ksh-cdpo');
+    if (path === '/presentations') return location.pathname.startsWith('/presentations');
     return location.pathname === path;
   };
   const isEventsDashboard = isActive('/dashboard');
   const showEditButton =
     isActive('/') ||
     isActive('/metrics') ||
+    isActive('/presentations') ||
     location.pathname.startsWith('/ksh-cdpo') ||
     location.pathname.startsWith('/workspace/');
   const showGoalsExport = isActive('/goals');
@@ -460,6 +466,14 @@ export function Layout() {
     }
   };
 
+  if (isPresentationViewer) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0a0a0f] via-[#0f0f14] to-[#0a0a0f]">
+        <Outlet context={{ currentQuarter, setCurrentQuarter, currentYear, isEditingMode, setIsEditingMode }} />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a0a0f] via-[#0f0f14] to-[#0a0a0f] flex flex-col md:flex-row">
       {/* Sidebar */}
@@ -480,7 +494,7 @@ export function Layout() {
                 <Link
                   key={item.id}
                   to={meta.path}
-                  className={`p-2 rounded-xl transition-all ${isActive(meta.path) ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30' : 'text-gray-400 hover:text-white'}`}
+                  className={`p-2 rounded-xl transition-all ${isMenuPathActive(meta.path) ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30' : 'text-gray-400 hover:text-white'}`}
                 >
                   <Icon size={20} />
                 </Link>
