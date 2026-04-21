@@ -437,7 +437,15 @@ const toSafeStorageName = (fileName: string) => {
   return normalized
     .split('/')
     .filter(Boolean)
-    .map((part) => encodeURIComponent(part))
+    .map((part) => {
+      const safe = part
+        .normalize('NFKD')
+        .replace(/[^\x00-\x7F]/g, '')
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      return safe || 'file';
+    })
     .join('/');
 };
 
