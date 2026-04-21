@@ -432,6 +432,15 @@ const normalizeStoredFileName = (fileName: string) => {
   return safeChunks.join('/') || 'file';
 };
 
+const toSafeStorageName = (fileName: string) => {
+  const normalized = normalizeStoredFileName(fileName);
+  return normalized
+    .split('/')
+    .filter(Boolean)
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+};
+
 const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
   const bytes = new Uint8Array(buffer);
   let binary = '';
@@ -458,7 +467,7 @@ const buildStoragePath = (
   fileId: string,
   fileName: string,
 ) => {
-  const safeName = normalizeStoredFileName(fileName);
+  const safeName = toSafeStorageName(fileName);
   return `${packageId}/${kind}/${fileId}/${safeName}`;
 };
 
@@ -499,7 +508,9 @@ const uploadPresentationPage = async (
     upsert: true,
     contentType: 'text/html; charset=utf-8',
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    throw new Error(`Storage upload failed for page "${page.fileName}" (${storagePath}): ${error.message}`);
+  }
 
   return {
     id: page.id,
@@ -525,7 +536,9 @@ const uploadPresentationAsset = async (
     upsert: true,
     contentType: mimeType,
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    throw new Error(`Storage upload failed for asset "${asset.fileName}" (${storagePath}): ${error.message}`);
+  }
 
   return {
     id: asset.id,
