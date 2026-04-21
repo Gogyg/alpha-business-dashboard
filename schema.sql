@@ -52,6 +52,17 @@ CREATE TABLE IF NOT EXISTS public.menu_config (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Create presentations packages table
+CREATE TABLE IF NOT EXISTS public.presentations_packages (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  event_date DATE,
+  is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
+  data JSONB NOT NULL DEFAULT '{"pages": [], "assets": []}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Set up Row Level Security (RLS)
 ALTER TABLE public.voc_metrics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.important_metrics ENABLE ROW LEVEL SECURITY;
@@ -59,6 +70,7 @@ ALTER TABLE public.goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.team_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.menu_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.presentations_packages ENABLE ROW LEVEL SECURITY;
 
 -- Allow read access for authenticated users
 CREATE POLICY "Allow read access for authenticated users to voc_metrics"
@@ -78,6 +90,9 @@ CREATE POLICY "Allow read access for authenticated users to events"
 
 CREATE POLICY "Allow read access for authenticated users to menu_config"
   ON public.menu_config FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Allow read access for authenticated users to presentations_packages"
+  ON public.presentations_packages FOR SELECT USING (auth.role() = 'authenticated');
 
 -- Allow write access for authenticated users
 CREATE POLICY "Allow write access for authenticated users to voc_metrics"
@@ -110,6 +125,13 @@ CREATE POLICY "Allow write access for authenticated users to menu_config"
 CREATE POLICY "Allow update access for authenticated users to menu_config"
   ON public.menu_config FOR UPDATE USING (auth.role() = 'authenticated');
 
+CREATE POLICY "Allow write access for authenticated users to presentations_packages"
+  ON public.presentations_packages FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "Allow update access for authenticated users to presentations_packages"
+  ON public.presentations_packages FOR UPDATE USING (auth.role() = 'authenticated');
+CREATE POLICY "Allow delete access for authenticated users to presentations_packages"
+  ON public.presentations_packages FOR DELETE USING (auth.role() = 'authenticated');
+
 -- Enable Realtime for all tables
 alter publication supabase_realtime add table public.voc_metrics;
 alter publication supabase_realtime add table public.important_metrics;
@@ -117,3 +139,4 @@ alter publication supabase_realtime add table public.goals;
 alter publication supabase_realtime add table public.team_data;
 alter publication supabase_realtime add table public.events;
 alter publication supabase_realtime add table public.menu_config;
+alter publication supabase_realtime add table public.presentations_packages;

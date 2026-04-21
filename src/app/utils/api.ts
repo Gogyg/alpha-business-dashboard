@@ -395,67 +395,230 @@ export interface PresentationPackagePayload {
   assets: PresentationAssetPayload[];
 }
 
-const PRESENTATIONS_STORAGE_KEY = 'global_presentations_packages_v1';
+interface PresentationStoredFileMeta {
+  id: string;
+  fileName: string;
+  storagePath: string;
+  mimeType: string;
+  encoding: 'base64' | 'text';
+}
 
-const readPresentationsFromStorage = (): PresentationPackagePayload[] => {
-  try {
-    const raw = localStorage.getItem(PRESENTATIONS_STORAGE_KEY);
-    if (!raw) return [];
+interface PresentationStoredData {
+  pages?: PresentationStoredFileMeta[];
+  assets?: PresentationStoredFileMeta[];
+}
 
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
+interface PresentationRow {
+  id: string;
+  title: string;
+  event_date: string | null;
+  is_recurring: boolean;
+  created_at: string;
+  updated_at: string;
+  data: PresentationStoredData | null;
+}
 
-    return parsed
-      .filter((item) => item && typeof item.id === 'string' && typeof item.title === 'string')
-      .map((item) => ({
-        id: item.id,
-        title: item.title,
-        eventDate: typeof item.eventDate === 'string' && item.eventDate.trim() ? item.eventDate : null,
-        isRecurring: Boolean(item.isRecurring),
-        createdAt: item.createdAt || new Date().toISOString(),
-        updatedAt: item.updatedAt || new Date().toISOString(),
-        pages: Array.isArray(item.pages)
-          ? item.pages
-              .filter((page: any) => page && typeof page.id === 'string' && typeof page.fileName === 'string')
-              .map((page: any) => ({
-                id: page.id,
-                fileName: page.fileName,
-                htmlContent: typeof page.htmlContent === 'string' ? page.htmlContent : '',
-              }))
-          : [],
-        assets: Array.isArray(item.assets)
-          ? item.assets
-              .filter((asset: any) => asset && typeof asset.id === 'string' && typeof asset.fileName === 'string')
-              .map((asset: any) => ({
-                id: asset.id,
-                fileName: asset.fileName,
-                mimeType: asset.mimeType || 'application/octet-stream',
-                encoding: asset.encoding === 'text' ? 'text' : 'base64',
-                content: typeof asset.content === 'string' ? asset.content : '',
-              }))
-          : [],
-      }));
-  } catch (err) {
-    console.error('Failed to parse presentations from localStorage:', err);
-    return [];
+const PRESENTATIONS_TABLE = 'presentations_packages';
+const PRESENTATIONS_BUCKET = 'presentations';
+
+const normalizeStoredFileName = (fileName: string) => {
+  const normalized = String(fileName || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/^\.\//, '')
+    .trim();
+  const chunks = normalized.split('/').filter(Boolean);
+  const safeChunks = chunks.filter((chunk) => chunk !== '.' && chunk !== '..');
+  return safeChunks.join('/') || 'file';
+};
+
+const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
   }
+  return btoa(binary);
 };
 
-const writePresentationsToStorage = (items: PresentationPackagePayload[]) => {
-  localStorage.setItem(PRESENTATIONS_STORAGE_KEY, JSON.stringify(items));
+const base64ToUint8Array = (base64: string) => {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 };
 
-// Presentations API (local fallback for development; switch to Supabase Storage in production rollout).
+const buildStoragePath = (
+  packageId: string,
+  kind: 'pages' | 'assets',
+  fileId: string,
+  fileName: string,
+) => {
+  const safeName = normalizeStoredFileName(fileName);
+  return `${packageId}/${kind}/${fileId}/${safeName}`;
+};
+
+const mapRowToPresentationSummary = (row: PresentationRow): PresentationPackagePayload => {
+  const pagesMeta = Array.isArray(row.data?.pages) ? row.data!.pages! : [];
+  const assetsMeta = Array.isArray(row.data?.assets) ? row.data!.assets! : [];
+
+  return {
+    id: row.id,
+    title: row.title,
+    eventDate: row.event_date,
+    isRecurring: row.is_recurring,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    pages: pagesMeta.map((page) => ({
+      id: page.id,
+      fileName: page.fileName,
+      htmlContent: '',
+    })),
+    assets: assetsMeta.map((asset) => ({
+      id: asset.id,
+      fileName: asset.fileName,
+      mimeType: asset.mimeType,
+      encoding: asset.encoding,
+      content: '',
+    })),
+  };
+};
+
+const uploadPresentationPage = async (
+  packageId: string,
+  page: PresentationPagePayload,
+): Promise<PresentationStoredFileMeta> => {
+  const storagePath = buildStoragePath(packageId, 'pages', page.id, page.fileName);
+  const blob = new Blob([page.htmlContent], { type: 'text/html;charset=utf-8' });
+
+  const { error } = await supabase.storage.from(PRESENTATIONS_BUCKET).upload(storagePath, blob, {
+    upsert: true,
+    contentType: 'text/html; charset=utf-8',
+  });
+  if (error) throw new Error(error.message);
+
+  return {
+    id: page.id,
+    fileName: page.fileName,
+    storagePath,
+    mimeType: 'text/html',
+    encoding: 'text',
+  };
+};
+
+const uploadPresentationAsset = async (
+  packageId: string,
+  asset: PresentationAssetPayload,
+): Promise<PresentationStoredFileMeta> => {
+  const storagePath = buildStoragePath(packageId, 'assets', asset.id, asset.fileName);
+  const mimeType = asset.mimeType || 'application/octet-stream';
+  const body =
+    asset.encoding === 'text'
+      ? new Blob([asset.content], { type: mimeType })
+      : new Blob([base64ToUint8Array(asset.content)], { type: mimeType });
+
+  const { error } = await supabase.storage.from(PRESENTATIONS_BUCKET).upload(storagePath, body, {
+    upsert: true,
+    contentType: mimeType,
+  });
+  if (error) throw new Error(error.message);
+
+  return {
+    id: asset.id,
+    fileName: asset.fileName,
+    storagePath,
+    mimeType,
+    encoding: asset.encoding,
+  };
+};
+
+const downloadPresentationPage = async (meta: PresentationStoredFileMeta): Promise<PresentationPagePayload> => {
+  const { data, error } = await supabase.storage.from(PRESENTATIONS_BUCKET).download(meta.storagePath);
+  if (error) throw new Error(error.message);
+
+  const htmlContent = await data.text();
+  return {
+    id: meta.id,
+    fileName: meta.fileName,
+    htmlContent,
+  };
+};
+
+const downloadPresentationAsset = async (meta: PresentationStoredFileMeta): Promise<PresentationAssetPayload> => {
+  const { data, error } = await supabase.storage.from(PRESENTATIONS_BUCKET).download(meta.storagePath);
+  if (error) throw new Error(error.message);
+
+  let content = '';
+  if (meta.encoding === 'text') {
+    content = await data.text();
+  } else {
+    const buffer = await data.arrayBuffer();
+    content = arrayBufferToBase64(buffer);
+  }
+
+  return {
+    id: meta.id,
+    fileName: meta.fileName,
+    mimeType: meta.mimeType || 'application/octet-stream',
+    encoding: meta.encoding,
+    content,
+  };
+};
+
+const removeStoragePaths = async (paths: string[]) => {
+  if (paths.length === 0) return;
+  const { error } = await supabase.storage.from(PRESENTATIONS_BUCKET).remove(paths);
+  if (error) throw new Error(error.message);
+};
+
+const getPresentationRowById = async (id: string): Promise<PresentationRow | null> => {
+  const { data, error } = await supabase
+    .from(PRESENTATIONS_TABLE)
+    .select('id, title, event_date, is_recurring, created_at, updated_at, data')
+    .eq('id', id)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return (data as PresentationRow | null) || null;
+};
+
 export const presentationsAPI = {
   getAll: async () => {
-    const items = readPresentationsFromStorage().sort((a, b) => {
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-    });
-    return items;
+    const { data, error } = await supabase
+      .from(PRESENTATIONS_TABLE)
+      .select('id, title, event_date, is_recurring, created_at, updated_at, data')
+      .order('updated_at', { ascending: false });
+
+    if (error) throw new Error(error.message);
+    return (data || []).map((row) => mapRowToPresentationSummary(row as PresentationRow));
   },
   getById: async (id: string) => {
-    const items = readPresentationsFromStorage();
-    return items.find((item) => item.id === id) || null;
+    const row = await getPresentationRowById(id);
+    if (!row) return null;
+
+    const pagesMeta = Array.isArray(row.data?.pages) ? row.data!.pages! : [];
+    const assetsMeta = Array.isArray(row.data?.assets) ? row.data!.assets! : [];
+
+    const [pages, assets] = await Promise.all([
+      Promise.all(pagesMeta.map((meta) => downloadPresentationPage(meta))),
+      Promise.all(assetsMeta.map((meta) => downloadPresentationAsset(meta))),
+    ]);
+
+    return {
+      id: row.id,
+      title: row.title,
+      eventDate: row.event_date,
+      isRecurring: row.is_recurring,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      pages,
+      assets,
+    } satisfies PresentationPackagePayload;
   },
   create: async (payload: {
     title: string;
@@ -464,97 +627,132 @@ export const presentationsAPI = {
     pages: PresentationPagePayload[];
     assets: PresentationAssetPayload[];
   }) => {
-    const now = new Date().toISOString();
-    const next: PresentationPackagePayload = {
-      id: crypto.randomUUID(),
-      title: payload.title,
-      eventDate: payload.eventDate,
-      isRecurring: payload.isRecurring,
-      createdAt: now,
-      updatedAt: now,
-      pages: payload.pages,
-      assets: payload.assets,
-    };
+    const packageId = crypto.randomUUID();
 
-    const items = readPresentationsFromStorage();
-    writePresentationsToStorage([next, ...items]);
-    return next;
+    const { error: insertError } = await supabase.from(PRESENTATIONS_TABLE).insert({
+      id: packageId,
+      title: payload.title,
+      event_date: payload.eventDate,
+      is_recurring: payload.isRecurring,
+      data: { pages: [], assets: [] },
+    });
+    if (insertError) throw new Error(insertError.message);
+
+    try {
+      const [pagesMeta, assetsMeta] = await Promise.all([
+        Promise.all(payload.pages.map((page) => uploadPresentationPage(packageId, page))),
+        Promise.all(payload.assets.map((asset) => uploadPresentationAsset(packageId, asset))),
+      ]);
+
+      const { error: updateError } = await supabase
+        .from(PRESENTATIONS_TABLE)
+        .update({
+          data: { pages: pagesMeta, assets: assetsMeta },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', packageId);
+      if (updateError) throw new Error(updateError.message);
+    } catch (err) {
+      await supabase.from(PRESENTATIONS_TABLE).delete().eq('id', packageId);
+      throw err;
+    }
+
+    const created = await presentationsAPI.getById(packageId);
+    if (!created) {
+      throw new Error('Failed to read created presentation package');
+    }
+    return created;
   },
   updateTitle: async (id: string, title: string) => {
-    const items = readPresentationsFromStorage();
-    const updated = items.map((item) =>
-      item.id === id
-        ? {
-            ...item,
-            title,
-            updatedAt: new Date().toISOString(),
-          }
-        : item,
-    );
-    writePresentationsToStorage(updated);
-    return { success: true };
+    const row = await getPresentationRowById(id);
+    if (!row) throw new Error('Presentation package not found');
+    return presentationsAPI.updateMeta(id, {
+      title,
+      eventDate: row.event_date,
+      isRecurring: row.is_recurring,
+    });
   },
   updateMeta: async (id: string, payload: { title: string; eventDate: string | null; isRecurring: boolean }) => {
-    const items = readPresentationsFromStorage();
-    const updated = items.map((item) =>
-      item.id === id
-        ? {
-            ...item,
-            title: payload.title,
-            eventDate: payload.eventDate,
-            isRecurring: payload.isRecurring,
-            updatedAt: new Date().toISOString(),
-          }
-        : item,
-    );
-    writePresentationsToStorage(updated);
+    const { error } = await supabase
+      .from(PRESENTATIONS_TABLE)
+      .update({
+        title: payload.title,
+        event_date: payload.eventDate,
+        is_recurring: payload.isRecurring,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
     return { success: true };
   },
   delete: async (id: string) => {
-    const items = readPresentationsFromStorage();
-    writePresentationsToStorage(items.filter((item) => item.id !== id));
+    const row = await getPresentationRowById(id);
+    if (row) {
+      const pagesMeta = Array.isArray(row.data?.pages) ? row.data!.pages! : [];
+      const assetsMeta = Array.isArray(row.data?.assets) ? row.data!.assets! : [];
+      const allPaths = [...pagesMeta, ...assetsMeta].map((meta) => meta.storagePath);
+      await removeStoragePaths(allPaths);
+    }
+
+    const { error } = await supabase.from(PRESENTATIONS_TABLE).delete().eq('id', id);
+    if (error) throw new Error(error.message);
     return { success: true };
   },
   updatePagesOrder: async (id: string, orderedPageIds: string[]) => {
-    const items = readPresentationsFromStorage();
-    const updated = items.map((item) => {
-      if (item.id !== id) return item;
+    const row = await getPresentationRowById(id);
+    if (!row) throw new Error('Presentation package not found');
 
-      const pagesById = new Map(item.pages.map((page) => [page.id, page]));
-      const nextPages = orderedPageIds
-        .map((pageId) => pagesById.get(pageId))
-        .filter((page): page is PresentationPagePayload => Boolean(page));
+    const pagesMeta = Array.isArray(row.data?.pages) ? row.data!.pages! : [];
+    const assetsMeta = Array.isArray(row.data?.assets) ? row.data!.assets! : [];
 
-      // Preserve any pages missing from payload at the end (safety for stale UI state).
-      const existingIds = new Set(nextPages.map((page) => page.id));
-      const tail = item.pages.filter((page) => !existingIds.has(page.id));
+    const pagesById = new Map(pagesMeta.map((page) => [page.id, page]));
+    const nextPages = orderedPageIds
+      .map((pageId) => pagesById.get(pageId))
+      .filter((page): page is PresentationStoredFileMeta => Boolean(page));
 
-      return {
-        ...item,
-        pages: [...nextPages, ...tail],
-        updatedAt: new Date().toISOString(),
-      };
-    });
+    const existingIds = new Set(nextPages.map((page) => page.id));
+    const tail = pagesMeta.filter((page) => !existingIds.has(page.id));
 
-    writePresentationsToStorage(updated);
+    const { error } = await supabase
+      .from(PRESENTATIONS_TABLE)
+      .update({
+        data: { pages: [...nextPages, ...tail], assets: assetsMeta },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+
     return { success: true };
   },
   updatePackageContent: async (
     id: string,
     payload: { pages: PresentationPagePayload[]; assets: PresentationAssetPayload[] },
   ) => {
-    const items = readPresentationsFromStorage();
-    const updated = items.map((item) =>
-      item.id === id
-        ? {
-            ...item,
-            pages: payload.pages,
-            assets: payload.assets,
-            updatedAt: new Date().toISOString(),
-          }
-        : item,
-    );
-    writePresentationsToStorage(updated);
+    const row = await getPresentationRowById(id);
+    if (!row) throw new Error('Presentation package not found');
+
+    const prevPagesMeta = Array.isArray(row.data?.pages) ? row.data!.pages! : [];
+    const prevAssetsMeta = Array.isArray(row.data?.assets) ? row.data!.assets! : [];
+    const prevPaths = new Set([...prevPagesMeta, ...prevAssetsMeta].map((item) => item.storagePath));
+
+    const [nextPagesMeta, nextAssetsMeta] = await Promise.all([
+      Promise.all(payload.pages.map((page) => uploadPresentationPage(id, page))),
+      Promise.all(payload.assets.map((asset) => uploadPresentationAsset(id, asset))),
+    ]);
+
+    const nextPaths = new Set([...nextPagesMeta, ...nextAssetsMeta].map((item) => item.storagePath));
+    const stalePaths = Array.from(prevPaths).filter((path) => !nextPaths.has(path));
+    await removeStoragePaths(stalePaths);
+
+    const { error } = await supabase
+      .from(PRESENTATIONS_TABLE)
+      .update({
+        data: { pages: nextPagesMeta, assets: nextAssetsMeta },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+
     return { success: true };
   },
 };
