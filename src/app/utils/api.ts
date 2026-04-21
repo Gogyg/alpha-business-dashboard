@@ -138,10 +138,161 @@ export const teamAPI = {
   save: (data: any) => dbSave('team_data', null, data),
 };
 
+interface EventsSnapshot {
+  rowId: string | null;
+  updatedAt: string | null;
+  events: any[];
+}
+
+const EVENTS_SINGLETON_KEY = 'global';
+
+const getEventsSnapshot = async (): Promise<EventsSnapshot> => {
+  const { data, error } = await supabase
+    .from('events')
+    .select('id, data, updated_at')
+    .order('updated_at', { ascending: false })
+    .limit(50);
+
+  if (error) throw new Error(error.message);
+
+  const rows = data || [];
+  const row = rows[0];
+
+  const extractRowEvents = (payload: any): any[] => {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.events)) return payload.events;
+    return [];
+  };
+
+  const mergedById = new Map<string, any>();
+  rows
+    .slice()
+    .reverse()
+    .forEach((candidateRow) => {
+      const rowEvents = extractRowEvents(candidateRow?.data);
+      rowEvents.forEach((event, index) => {
+        const stringId =
+          typeof event?.id === 'string' && event.id.trim().length > 0
+            ? event.id.trim()
+            : null;
+        const numberId =
+          typeof event?.id === 'number' && Number.isFinite(event.id)
+            ? String(event.id)
+            : null;
+
+        // Legacy numeric IDs could collide if old parallel inserts created multiple rows.
+        // In that case, promote them to row-scoped keys to preserve both events.
+        const eventId =
+          stringId ||
+          (rows.length > 1 && numberId ? `${candidateRow.id}-${numberId}` : numberId) ||
+          `${candidateRow.id}-${index}`;
+
+        mergedById.set(eventId, {
+          ...(event || {}),
+          id: eventId,
+        });
+      });
+    });
+
+  const events = Array.from(mergedById.values());
+
+  return {
+    rowId: row?.id ?? null,
+    updatedAt: row?.updated_at ?? null,
+    events,
+  };
+};
+
 // Events API
 export const eventsAPI = {
-  get: () => dbGet('events'),
-  save: (data: any) => dbSave('events', null, data),
+  get: async () => {
+    const snapshot = await getEventsSnapshot();
+    return snapshot.events;
+  },
+  getSnapshot: () => getEventsSnapshot(),
+  saveWithSnapshot: async (
+    events: any[],
+    snapshot: Pick<EventsSnapshot, 'rowId' | 'updatedAt'>,
+  ): Promise<{ conflict: boolean; rowId: string | null; updatedAt: string | null }> => {
+    const nowIso = new Date().toISOString();
+
+    if (!snapshot.rowId) {
+      const insertWithSingleton = async () =>
+        supabase
+          .from('events')
+          .insert({ singleton_key: EVENTS_SINGLETON_KEY, data: events, updated_at: nowIso })
+          .select('id, updated_at')
+          .limit(1);
+
+      const insertLegacy = async () =>
+        supabase
+          .from('events')
+          .insert({ data: events, updated_at: nowIso })
+          .select('id, updated_at')
+          .limit(1);
+
+      let response = await insertWithSingleton();
+
+      if (response.error && (response.error as any)?.code === '42703') {
+        response = await insertLegacy();
+      }
+
+      if (response.error) {
+        if ((response.error as any)?.code === '23505') {
+          return {
+            conflict: true,
+            rowId: snapshot.rowId,
+            updatedAt: snapshot.updatedAt,
+          };
+        }
+        throw new Error(response.error.message);
+      }
+
+      return {
+        conflict: false,
+        rowId: response.data?.[0]?.id ?? null,
+        updatedAt: response.data?.[0]?.updated_at ?? nowIso,
+      };
+    }
+
+    let query = supabase
+      .from('events')
+      .update({ data: events, updated_at: nowIso })
+      .eq('id', snapshot.rowId);
+
+    if (snapshot.updatedAt) {
+      query = query.eq('updated_at', snapshot.updatedAt);
+    }
+
+    const { data, error } = await query.select('id, updated_at').limit(1);
+    if (error) throw new Error(error.message);
+
+    if (!data || data.length === 0) {
+      return {
+        conflict: true,
+        rowId: snapshot.rowId,
+        updatedAt: snapshot.updatedAt,
+      };
+    }
+
+    return {
+      conflict: false,
+      rowId: data[0].id ?? snapshot.rowId,
+      updatedAt: data[0].updated_at ?? nowIso,
+    };
+  },
+  subscribe: (onChange: () => void) => {
+    const channel = supabase
+      .channel(`events-sync-${crypto.randomUUID()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
+        onChange();
+      })
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  },
 };
 
 // Menu config API

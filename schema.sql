@@ -36,10 +36,13 @@ CREATE TABLE IF NOT EXISTS public.team_data (
 -- Create the events table
 CREATE TABLE IF NOT EXISTS public.events (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  singleton_key TEXT NOT NULL DEFAULT 'global',
   data JSONB NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS events_singleton_key_uidx ON public.events(singleton_key);
 
 -- Create the menu config table
 CREATE TABLE IF NOT EXISTS public.menu_config (

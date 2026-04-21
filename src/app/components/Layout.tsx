@@ -97,13 +97,14 @@ export function Layout() {
     if (path === '/ksh-cdpo') return location.pathname.startsWith('/ksh-cdpo');
     return location.pathname === path;
   };
+  const isEventsDashboard = isActive('/dashboard');
   const showEditButton =
     isActive('/') ||
     isActive('/metrics') ||
-    isActive('/dashboard') ||
     location.pathname.startsWith('/ksh-cdpo') ||
     location.pathname.startsWith('/workspace/');
   const showGoalsExport = isActive('/goals');
+  const showQuarterSelector = !isEventsDashboard;
 
   useEffect(() => {
     const loadMenu = async () => {
@@ -120,6 +121,12 @@ export function Layout() {
     };
     loadMenu();
   }, []);
+
+  useEffect(() => {
+    if (isEventsDashboard && isEditingMode) {
+      setIsEditingMode(false);
+    }
+  }, [isEventsDashboard, isEditingMode, setIsEditingMode]);
 
   const visibleMenu = useMemo(() => {
     return [...menuConfig]
@@ -721,51 +728,59 @@ export function Layout() {
         {/* Fixed Header Controls */}
         <div className="sticky top-0 z-40 bg-[#0a0a0f]/80 backdrop-blur-xl border-b border-white/5">
           <div className="p-4 md:p-8 md:pb-4">
-            <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 md:gap-4 w-full">
+            <div className="max-w-5xl mx-auto flex min-h-[44px] flex-col sm:flex-row items-center justify-between gap-3 md:gap-4 w-full">
               {/* Title with Gradient */}
               <h1 className="text-2xl md:text-3xl font-bold hidden sm:block bg-gradient-to-r from-[#34d399] via-[#3b82f6] to-[#8b5cf6] bg-clip-text text-transparent">
                 Альфа-Бизнес & Digital sales
               </h1>
               
-              <div className="flex items-center gap-3 md:gap-4 w-full sm:w-auto">
-                {/* Quarter Selector */}
-                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-2 flex items-center justify-between shadow-xl shadow-black/20 flex-1 sm:flex-none">
-                  <button
-                    onClick={() => handleQuarterChange('prev')}
-                    disabled={currentQuarter === 'Q1'}
-                    className="text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ChevronLeft size={18} />
-                  </button>
-                  <span className="text-white font-medium mx-4">{currentQuarter} {currentYear}</span>
-                  <button
-                    onClick={() => handleQuarterChange('next')}
-                    disabled={currentQuarter === 'Q4'}
-                    className="text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ChevronRight size={18} />
-                  </button>
+              <div className="flex min-h-[42px] w-full items-center justify-end gap-3 md:gap-4 sm:w-[380px]">
+                <div className="h-[42px] w-[180px] shrink-0">
+                  {showQuarterSelector ? (
+                    <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-2 h-full w-full flex items-center justify-between shadow-xl shadow-black/20">
+                      <button
+                        onClick={() => handleQuarterChange('prev')}
+                        disabled={currentQuarter === 'Q1'}
+                        className="text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                      <span className="text-white font-medium mx-4">{currentQuarter} {currentYear}</span>
+                      <button
+                        onClick={() => handleQuarterChange('next')}
+                        disabled={currentQuarter === 'Q4'}
+                        className="text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="h-full w-full" aria-hidden="true" />
+                  )}
                 </div>
 
-                {/* Edit/Export Button - conditional based on page */}
-                {showGoalsExport ? (
-                  <button
-                    onClick={handleExportGoals}
-                    className="bg-white/5 hover:bg-white/10 border border-white/10 text-white px-3 py-2 rounded-xl flex items-center gap-2 transition-all shadow-xl shadow-black/20 justify-center text-sm backdrop-blur-xl"
-                  >
-                    <Download size={16} />
-                    <span className="hidden sm:inline">Выгрузить</span>
-                  </button>
-                ) : showEditButton ? (
-                   <button
-                    onClick={() => setIsEditingMode(!isEditingMode)}
-                    className={`${
-                      isEditingMode ? 'bg-white/5 hover:bg-white/10 border border-white/10' : 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-600 border border-red-500/50 shadow-lg shadow-red-500/30 ring-2 ring-red-500/20'
-                    } text-white px-5 py-2.5 rounded-xl flex items-center gap-2.5 transition-all shadow-xl justify-center text-sm font-bold backdrop-blur-xl hover:scale-105 active:scale-95`}
-                  >
-                    {isEditingMode ? <><X size={18} />Отменить</> : <><Edit3 size={18} />Редактировать</>}
-                  </button>
-                ) : null}
+                <div className="h-[42px] w-[180px] shrink-0">
+                  {showGoalsExport ? (
+                    <button
+                      onClick={handleExportGoals}
+                      className="bg-white/5 hover:bg-white/10 border border-white/10 text-white h-full w-full rounded-xl flex items-center gap-2 transition-all shadow-xl shadow-black/20 justify-center text-sm backdrop-blur-xl"
+                    >
+                      <Download size={16} />
+                      <span className="hidden sm:inline">Выгрузить</span>
+                    </button>
+                  ) : showEditButton ? (
+                    <button
+                      onClick={() => setIsEditingMode(!isEditingMode)}
+                      className={`${
+                        isEditingMode ? 'bg-white/5 hover:bg-white/10 border border-white/10' : 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-600 border border-red-500/50 shadow-lg shadow-red-500/30 ring-2 ring-red-500/20'
+                      } text-white h-full w-full rounded-xl flex items-center gap-2.5 transition-all shadow-xl justify-center text-sm font-bold backdrop-blur-xl hover:scale-105 active:scale-95`}
+                    >
+                      {isEditingMode ? <><X size={18} />Отменить</> : <><Edit3 size={18} />Редактировать</>}
+                    </button>
+                  ) : (
+                    <div className="h-full w-full" aria-hidden="true" />
+                  )}
+                </div>
               </div>
             </div>
           </div>
