@@ -26,6 +26,41 @@ const normalizeRelativePath = (value: string) =>
     .replace(/^\//, '')
     .trim();
 
+const normalizePathSegments = (value: string) => {
+  const segments = value.split('/');
+  const resolved: string[] = [];
+
+  for (const segment of segments) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') {
+      resolved.pop();
+      continue;
+    }
+    resolved.push(segment);
+  }
+
+  return resolved.join('/');
+};
+
+const resolveHrefAgainstPage = (href: string, activeFileName: string | null) => {
+  const rawHref = href.split('#')[0];
+  const [pathWithoutQuery = ''] = rawHref.split('?');
+
+  const basePath = normalizeRelativePath(activeFileName || '');
+  const baseDir = basePath.includes('/') ? basePath.slice(0, basePath.lastIndexOf('/') + 1) : '';
+
+  try {
+    const baseUrl = `https://local.presentation/${baseDir}`;
+    const parsed = new URL(href, baseUrl);
+    const normalizedPath = normalizePathSegments(
+      decodeURIComponent(parsed.pathname).replace(/^\/+/, ''),
+    );
+    return normalizedPath;
+  } catch {
+    return normalizePathSegments(normalizeRelativePath(pathWithoutQuery));
+  }
+};
+
 const getPageDisplayName = (fileName: string) => fileName.replace(/\.(html?|xhtml)$/i, '');
 
 const isHtmlFile = (fileName: string) => /\.(html?|xhtml)$/i.test(fileName);
@@ -246,25 +281,22 @@ export function PresentationPackagePage() {
     const handleMessage = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow) return;
       const payload = event.data as { type?: string; href?: string } | null;
-      if (!payload || payload.type !== 'presentation-nav' || !payload.href || !item) return;
+      if (!payload) return;
+
+      if (payload.type !== 'presentation-nav' || !payload.href || !item) return;
 
       const href = payload.href;
       if (href.startsWith('#')) return;
 
-      let candidate = href;
-      try {
-        const parsed = new URL(href, 'https://local.presentation/');
-        candidate = parsed.pathname;
-      } catch {
-        candidate = href;
-      }
-
-      const normalized = normalizeRelativePath(candidate);
+      const normalized = resolveHrefAgainstPage(href, activePage?.fileName || null);
       const basename = normalized.split('/').pop() || normalized;
 
       const target =
-        item.pages.find((page) => normalizeRelativePath(page.fileName) === normalized) ||
-        item.pages.find((page) => normalizeRelativePath(page.fileName).split('/').pop() === basename);
+        item.pages.find((page) => normalizePathSegments(normalizeRelativePath(page.fileName)) === normalized) ||
+        item.pages.find((page) => {
+          const pageBasename = normalizePathSegments(normalizeRelativePath(page.fileName)).split('/').pop();
+          return pageBasename === basename;
+        });
 
       if (target) {
         setActivePageId(target.id);
@@ -273,7 +305,7 @@ export function PresentationPackagePage() {
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [item]);
+  }, [activePage?.fileName, item]);
 
   const goToPrev = () => {
     if (!item || activePageIndex <= 0) return;
@@ -510,9 +542,9 @@ export function PresentationPackagePage() {
   }
 
   return (
-    <div className="p-4 md:p-6 min-h-screen pb-28">
-      <div className="max-w-[1600px] mx-auto space-y-4">
-        <div className="flex items-center justify-between">
+    <div className="p-3 md:p-4 min-h-screen pb-28">
+      <div className="fixed top-3 left-0 right-0 z-30 px-3 md:px-4">
+        <div className="max-w-[1600px] mx-auto flex items-center justify-between rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl p-2">
           <Link to="/presentations" className="text-sm text-gray-300 hover:text-white transition-colors">
             ← К списку презентаций
           </Link>
@@ -525,7 +557,9 @@ export function PresentationPackagePage() {
             <Settings size={18} />
           </button>
         </div>
+      </div>
 
+      <div className="max-w-[1600px] mx-auto space-y-4 pt-16">
         {showPageQuickNav && (
           <div className="flex flex-wrap gap-2">
             {item.pages.map((page, index) => {
