@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type Session, type User } from '@supabase/supabase-js';
 import { publicAnonKey, supabasePublicUrl } from '/utils/supabase/info';
 
 const supabaseUrl = supabasePublicUrl;
@@ -9,7 +9,13 @@ if (!publicAnonKey || publicAnonKey === 'your-anon-key-here') {
 
 const anonKey = publicAnonKey;
 
-export const supabase = createClient(supabaseUrl, anonKey);
+export const supabase = createClient(supabaseUrl, anonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
 
 // Auth helper
 export const getAuthToken = () => localStorage.getItem('auth_token');
@@ -22,6 +28,45 @@ export const getCurrentUser = () => {
 };
 export const setCurrentUser = (user: any) => localStorage.setItem('current_user', JSON.stringify(user));
 export const removeCurrentUser = () => localStorage.removeItem('current_user');
+
+const mirrorAuthSession = (session: Session | null) => {
+  if (session?.access_token) {
+    setAuthToken(session.access_token);
+  } else {
+    removeAuthToken();
+  }
+
+  if (session?.user) {
+    setCurrentUser(session.user);
+  } else {
+    removeCurrentUser();
+  }
+};
+
+export const syncAuthStateFromSupabase = async () => {
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession();
+
+  if (error) throw new Error(error.message);
+
+  mirrorAuthSession(session);
+  return session;
+};
+
+export const subscribeToAuthState = (onChange: (session: Session | null, user: User | null) => void) => {
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((_event, session) => {
+    mirrorAuthSession(session);
+    onChange(session, session?.user ?? null);
+  });
+
+  return () => {
+    subscription.unsubscribe();
+  };
+};
 
 // Auth API
 export const authAPI = {
@@ -43,19 +88,14 @@ export const authAPI = {
       password,
     });
     if (error) throw new Error(error.message);
-    
-    if (data.session) {
-      setAuthToken(data.session.access_token);
-      setCurrentUser(data.user);
-    }
-    
+
+    mirrorAuthSession(data.session);
     return data;
   },
 
   logout: async () => {
     await supabase.auth.signOut();
-    removeAuthToken();
-    removeCurrentUser();
+    mirrorAuthSession(null);
   },
   
   sendPasswordResetEmail: async (email: string) => {

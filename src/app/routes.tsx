@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { createBrowserRouter, Navigate } from "react-router";
 import { Layout } from "./components/Layout";
 import { Dashboard } from "./pages/Dashboard";
@@ -12,16 +13,53 @@ import { WorkspacePage } from "./pages/WorkspacePage";
 import { MboPage } from "./pages/MboPage";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
-import { getAuthToken } from "./utils/api";
+import { subscribeToAuthState, syncAuthStateFromSupabase } from "./utils/api";
 
-// Protected route component (Auth temporarily disabled by user request)
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const isAuthenticated = !!getAuthToken();
-  
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const bootstrap = async () => {
+      try {
+        const session = await syncAuthStateFromSupabase();
+        if (!isMounted) return;
+        setIsAuthenticated(!!session);
+      } catch (error) {
+        console.error("Failed to sync auth session:", error);
+        if (!isMounted) return;
+        setIsAuthenticated(false);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void bootstrap();
+
+    const unsubscribe = subscribeToAuthState((session) => {
+      if (!isMounted) return;
+      setIsAuthenticated(!!session);
+      setIsLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  if (isLoading) {
+    return <div className="min-h-screen bg-[#0a0a0f]" />;
+  }
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
-  
+
   return <>{children}</>;
 };
 

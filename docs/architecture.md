@@ -34,6 +34,11 @@ Table: `public.mbo_pages`
 3. Update singleton row in `mbo_pages`.
 4. Realtime notifies other sessions.
 
+## Auth Source of Truth
+- Route access and shared-data writes must rely on the real Supabase session, not on a standalone `localStorage` token flag.
+- Local `auth_token` / `current_user` values are only a mirror of the current Supabase session for UI convenience.
+- If Supabase session is missing or expired, the user must be treated as logged out so RLS-protected tables behave predictably.
+
 ## Presentations Architecture
 ### Metadata (Postgres)
 Table: `public.presentations_packages`
