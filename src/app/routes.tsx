@@ -9,6 +9,7 @@ import { KshCdpoDashboard } from "./pages/KshCdpoDashboard";
 import { PresentationsPage } from "./pages/PresentationsPage";
 import { PresentationPackagePage } from "./pages/PresentationPackagePage";
 import { WorkspacePage } from "./pages/WorkspacePage";
+import { MboPage } from "./pages/MboPage";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import { getAuthToken } from "./utils/api";
@@ -42,6 +43,7 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, Component: Dashboard },
+      { path: "mbo", Component: MboPage },
       { path: "dashboard", Component: EventsDashboard },
       { path: "metrics", Component: Metrics },
       { path: "goals", Component: Goals },

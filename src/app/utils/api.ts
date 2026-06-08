@@ -144,7 +144,14 @@ interface EventsSnapshot {
   events: any[];
 }
 
+interface SingletonSnapshot<T> {
+  rowId: string | null;
+  updatedAt: string | null;
+  data: T | null;
+}
+
 const EVENTS_SINGLETON_KEY = 'global';
+const MBO_SINGLETON_KEY = 'global';
 
 const getEventsSnapshot = async (): Promise<EventsSnapshot> => {
   const { data, error } = await supabase
@@ -293,6 +300,113 @@ export const eventsAPI = {
       void supabase.removeChannel(channel);
     };
   },
+};
+
+const getSingletonSnapshot = async <T>(
+  table: string,
+  singletonKey: string,
+): Promise<SingletonSnapshot<T>> => {
+  const { data, error } = await supabase
+    .from(table)
+    .select('id, data, updated_at')
+    .eq('singleton_key', singletonKey)
+    .order('updated_at', { ascending: false })
+    .limit(1);
+
+  if (error) throw new Error(error.message);
+
+  const row = data?.[0];
+  return {
+    rowId: row?.id ?? null,
+    updatedAt: row?.updated_at ?? null,
+    data: (row?.data as T | undefined) ?? null,
+  };
+};
+
+const saveSingletonWithSnapshot = async <T>(
+  table: string,
+  singletonKey: string,
+  payload: T,
+  snapshot: Pick<SingletonSnapshot<T>, 'rowId' | 'updatedAt'>,
+): Promise<{ conflict: boolean; rowId: string | null; updatedAt: string | null }> => {
+  const nowIso = new Date().toISOString();
+
+  if (!snapshot.rowId) {
+    const { data, error } = await supabase
+      .from(table)
+      .insert({ singleton_key: singletonKey, data: payload, updated_at: nowIso })
+      .select('id, updated_at')
+      .limit(1);
+
+    if (error) {
+      if ((error as any)?.code === '23505') {
+        return {
+          conflict: true,
+          rowId: snapshot.rowId,
+          updatedAt: snapshot.updatedAt,
+        };
+      }
+      throw new Error(error.message);
+    }
+
+    return {
+      conflict: false,
+      rowId: data?.[0]?.id ?? null,
+      updatedAt: data?.[0]?.updated_at ?? nowIso,
+    };
+  }
+
+  let query = supabase
+    .from(table)
+    .update({ data: payload, updated_at: nowIso })
+    .eq('id', snapshot.rowId);
+
+  if (snapshot.updatedAt) {
+    query = query.eq('updated_at', snapshot.updatedAt);
+  }
+
+  const { data, error } = await query.select('id, updated_at').limit(1);
+  if (error) throw new Error(error.message);
+
+  if (!data || data.length === 0) {
+    return {
+      conflict: true,
+      rowId: snapshot.rowId,
+      updatedAt: snapshot.updatedAt,
+    };
+  }
+
+  return {
+    conflict: false,
+    rowId: data[0].id ?? snapshot.rowId,
+    updatedAt: data[0].updated_at ?? nowIso,
+  };
+};
+
+const subscribeToTable = (table: string, onChange: () => void) => {
+  const channel = supabase
+    .channel(`${table}-sync-${crypto.randomUUID()}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table }, () => {
+      onChange();
+    })
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+};
+
+export const mboAPI = {
+  get: async () => {
+    const snapshot = await getSingletonSnapshot<any>('mbo_pages', MBO_SINGLETON_KEY);
+    return snapshot.data;
+  },
+  getSnapshot: () => getSingletonSnapshot<any>('mbo_pages', MBO_SINGLETON_KEY),
+  saveWithSnapshot: async (
+    data: any,
+    snapshot: Pick<SingletonSnapshot<any>, 'rowId' | 'updatedAt'>,
+  ) => saveSingletonWithSnapshot('mbo_pages', MBO_SINGLETON_KEY, data, snapshot),
+  subscribe: (onChange: () => void) => subscribeToTable('mbo_pages', onChange),
 };
 
 // Menu config API

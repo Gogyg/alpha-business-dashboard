@@ -7,7 +7,7 @@ import { authAPI, getCurrentUser, goalsAPI, menuAPI } from '../utils/api';
 import { PasswordModal } from './PasswordModal';
 
 interface MenuItemConfig {
-  id: 'scorecard' | 'events' | 'metrics' | 'goals' | 'ksh-cdpo' | 'presentations';
+  id: 'scorecard' | 'mbo' | 'events' | 'metrics' | 'goals' | 'ksh-cdpo' | 'presentations';
   label: string;
   hidden?: boolean;
   order: number;
@@ -28,15 +28,17 @@ interface MenuConfigPayload {
 const DEFAULT_MENU: MenuItemConfig[] = [
   { id: 'scorecard', label: 'Красная шапочка', order: 1 },
   { id: 'events', label: 'Дашборд', order: 2 },
-  { id: 'metrics', label: 'Важные метрики', order: 3 },
-  { id: 'goals', label: 'Цели квартала', order: 4 },
-  { id: 'ksh-cdpo', label: 'КШ CDPO', order: 5 },
-  { id: 'presentations', label: 'Презентации', order: 6 },
+  { id: 'mbo', label: 'MBO', order: 3 },
+  { id: 'metrics', label: 'Важные метрики', order: 4 },
+  { id: 'goals', label: 'Цели квартала', order: 5 },
+  { id: 'ksh-cdpo', label: 'КШ CDPO', order: 6 },
+  { id: 'presentations', label: 'Презентации', order: 7 },
 ];
 
 const MENU_META = {
   scorecard: { path: '/', icon: Target },
   events: { path: '/dashboard', icon: CalendarDays },
+  mbo: { path: '/mbo', icon: BarChart3 },
   metrics: { path: '/metrics', icon: BarChart3 },
   goals: { path: '/goals', icon: Goal },
   'ksh-cdpo': { path: '/ksh-cdpo', icon: TrendingUp },
@@ -103,14 +105,16 @@ export function Layout() {
     return location.pathname === path;
   };
   const isEventsDashboard = isActive('/dashboard');
+  const isMboPage = isActive('/mbo');
   const showEditButton =
     isActive('/') ||
+    isActive('/mbo') ||
     isActive('/metrics') ||
     isActive('/presentations') ||
     location.pathname.startsWith('/ksh-cdpo') ||
     location.pathname.startsWith('/workspace/');
   const showGoalsExport = isActive('/goals');
-  const showQuarterSelector = !isEventsDashboard;
+  const showQuarterSelector = !isEventsDashboard && !isMboPage;
 
   useEffect(() => {
     const loadMenu = async () => {
@@ -773,7 +777,7 @@ export function Layout() {
                   )}
                 </div>
 
-                <div className="h-[42px] w-[180px] shrink-0">
+              <div className="h-[42px] w-[180px] shrink-0">
                   {showGoalsExport ? (
                     <button
                       onClick={handleExportGoals}

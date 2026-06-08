@@ -11,9 +11,28 @@
 ## Main Data Domains
 - `events` (singleton-style shared events model).
 - `menu_config` (shared menu structure/config).
+- `mbo_pages` (singleton-style shared MBO page model).
 - `ksh_cdpo_dashboards` / `ksh_cdpo_widgets`.
 - `presentations_packages` (metadata for presentation packages).
 - Storage bucket `presentations` (HTML pages and assets for presentation packages).
+
+## MBO Architecture
+### Metadata (Postgres)
+Table: `public.mbo_pages`
+- `singleton_key = 'global'`
+- `data` stores the full MBO page payload (`header` + `sections` + `metrics` + `insights`)
+- `updated_at` is used as an optimistic lock for conflict-safe saves
+
+### Read Flow
+1. Load singleton row from `mbo_pages`.
+2. Normalize page JSON on the client.
+3. Subscribe to realtime updates for cross-session refresh.
+
+### Write Flow
+1. User enters edit mode via the shared password gate.
+2. Client merges local edits with the latest snapshot when needed.
+3. Update singleton row in `mbo_pages`.
+4. Realtime notifies other sessions.
 
 ## Presentations Architecture
 ### Metadata (Postgres)

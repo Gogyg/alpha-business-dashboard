@@ -52,6 +52,17 @@ CREATE TABLE IF NOT EXISTS public.menu_config (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Create the MBO singleton page table
+CREATE TABLE IF NOT EXISTS public.mbo_pages (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  singleton_key TEXT NOT NULL DEFAULT 'global',
+  data JSONB NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS mbo_pages_singleton_key_uidx ON public.mbo_pages(singleton_key);
+
 -- Create presentations packages table
 CREATE TABLE IF NOT EXISTS public.presentations_packages (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -70,6 +81,7 @@ ALTER TABLE public.goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.team_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.menu_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mbo_pages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.presentations_packages ENABLE ROW LEVEL SECURITY;
 
 -- Allow read access for authenticated users
@@ -90,6 +102,9 @@ CREATE POLICY "Allow read access for authenticated users to events"
 
 CREATE POLICY "Allow read access for authenticated users to menu_config"
   ON public.menu_config FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Allow read access for authenticated users to mbo_pages"
+  ON public.mbo_pages FOR SELECT USING (auth.role() = 'authenticated');
 
 CREATE POLICY "Allow read access for authenticated users to presentations_packages"
   ON public.presentations_packages FOR SELECT USING (auth.role() = 'authenticated');
@@ -125,6 +140,11 @@ CREATE POLICY "Allow write access for authenticated users to menu_config"
 CREATE POLICY "Allow update access for authenticated users to menu_config"
   ON public.menu_config FOR UPDATE USING (auth.role() = 'authenticated');
 
+CREATE POLICY "Allow write access for authenticated users to mbo_pages"
+  ON public.mbo_pages FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "Allow update access for authenticated users to mbo_pages"
+  ON public.mbo_pages FOR UPDATE USING (auth.role() = 'authenticated');
+
 CREATE POLICY "Allow write access for authenticated users to presentations_packages"
   ON public.presentations_packages FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 CREATE POLICY "Allow update access for authenticated users to presentations_packages"
@@ -139,4 +159,5 @@ alter publication supabase_realtime add table public.goals;
 alter publication supabase_realtime add table public.team_data;
 alter publication supabase_realtime add table public.events;
 alter publication supabase_realtime add table public.menu_config;
+alter publication supabase_realtime add table public.mbo_pages;
 alter publication supabase_realtime add table public.presentations_packages;

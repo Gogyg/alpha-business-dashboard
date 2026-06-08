@@ -37,6 +37,7 @@
 ## 4) Main Focus Files
 - `src/app/pages/EventsDashboard.tsx`
 - `src/app/pages/Dashboard.tsx`
+- `src/app/pages/MboPage.tsx`
 - `src/app/pages/KshCdpoDashboard.tsx`
 - `src/app/pages/WorkspacePage.tsx`
 - `src/app/components/RedcapStandardWidgets.tsx`
@@ -45,6 +46,7 @@
 - `utils/supabase/info.tsx`
 - `schema.sql`
 - `supabase/migrations/20260415_events_singleton.sql`
+- `supabase/migrations/20260608_mbo_singleton.sql`
 
 ## 5) Events Dashboard — Current Implemented Behavior
 
@@ -113,9 +115,40 @@
 - On `/dashboard`:
   - hide quarter switch in top header
   - hide edit button in top header
+- On `/mbo`:
+  - hide quarter switch in top header
+  - keep edit mode available
 - Header geometry made stable to avoid visual jumping between menu sections.
 
-## 8) Production Status (latest known in this context)
+## 8) MBO Page — Current Implemented Behavior
+
+### 8.1 Navigation and scope
+- `MBO` is a first-level sidebar item.
+- Route: `/mbo`.
+- Page is shared between users and is not tied to quarters.
+
+### 8.2 Editing model
+- Full page edit mode is supported.
+- Editable areas:
+  - page header
+  - section titles
+  - badges
+  - metrics
+  - insight cards
+- Users can:
+  - add sections
+  - duplicate sections
+  - reorder sections
+  - delete sections
+  - add/remove metrics inside a section
+  - add/remove insight cards and lines inside them
+
+### 8.3 Visual model
+- Each section stores its own color palette (`paletteId`).
+- Palette is selected explicitly in edit mode and persisted in DB.
+- Current baseline visual style follows an executive dark command-center layout.
+
+## 9) Production Status (latest known in this context)
 - Code deployed from commit: `2ee6d5f` (main).
 - VPS build passed.
 - Events singleton migration applied in prod DB.
@@ -124,7 +157,7 @@
   - `singleton_key = global`
   - data readable
 
-## 9) Pre-release Checklist (before any next prod rollout)
+## 10) Pre-release Checklist (before any next prod rollout)
 - Local: `npm run build`
 - Update technical docs before rollout:
   - `docs/architecture.md`
@@ -138,12 +171,30 @@
   - ensure behavior is shared across different users/sessions (not tied to one browser `localStorage` only).
 - Smoke-check critical screens:
   - Красная шапочка
+  - MBO
   - Events dashboard
   - КШ CDPO
   - User pages
   - view/edit modes
 
-## 10) How to use this context in a new chat
+## 11) Mandatory UI Testing Rule
+- Any UI change must be checked in a real browser, not only by code inspection.
+- Required coverage for UI changes:
+  - desktop viewport around `1280x720`
+  - mobile viewport around `390-520px` width
+  - `view-mode`
+  - `edit-mode` when the page supports editing
+- If a source mockup/HTML/screenshot exists, compare the implemented screen directly against it before closing the task.
+- A UI task is not considered complete if any of the following remain:
+  - overlapping text
+  - clipped text or controls
+  - broken grid / inconsistent content width
+  - buttons colliding with adjacent controls
+  - labels or selects wrapping into unreadable vertical stacks
+  - unreadable contrast or visually noisy edit forms
+- If edit-mode is password-gated, obtain working access for test verification or explicitly state that edit-mode was not fully verified. Do not report a full UI pass without that verification.
+
+## 12) How to use this context in a new chat
 Use this exact first message:
 
 `Прочитай /Users/dmitriimusikhin/Documents/Vibe coding/alpha-business-dashboard-main/PROJECT_CONTEXT.md и работаем строго по нему.`

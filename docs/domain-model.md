@@ -37,6 +37,30 @@ Key rules:
 ### Menu Configuration
 Defines visible menu items and custom pages for all users.
 
+### MBO Page
+Represents a shared executive MBO screen available at `/mbo`.
+
+Fields:
+- `headerTitle`
+- `headerSubtitle`
+- `liveLabel`
+- `sections[]`
+
+Section fields:
+- `id`
+- `title`
+- `badge`
+- `paletteId`
+- `metrics[]`
+- `insights[]`
+
+Behavior rules:
+- shared singleton entity for all authenticated users
+- not quarter-bound
+- full edit mode supports add/remove/reorder sections
+- every section stores its own color palette selection
+- metrics and insight cards are fully editable and saved in DB
+
 ## User Visibility Rules
 - Shared business entities must be visible to different users/sessions.
 - Browser-only storage is not allowed as source of truth for shared entities.
