@@ -272,7 +272,7 @@ export function RedCapPage({
     return {
       digitalMetrics: [
         { id: 1, name: 'Доля digital активных клиентов ЮЛ в цифровых каналах (MAU)', weight: '20 %', fact: hasData ? 89.94 : 0, plan: 90.8, type: '=', maxPercent: '∞', percent: hasData ? '99,1 %' : '0 %' },
-        { id: 2, name: 'MAU Spotlight', weight: '20 %', fact: hasData ? 23800 : 0, plan: 21000, type: '=', maxPercent: '∞', percent: hasData ? '113,3 %' : '0 %', isNew: true },
+        { id: 2, name: 'MAU Spotlight', weight: '20 %', fact: hasData ? 23800 : 0, plan: 21000, type: '=', maxPercent: '∞', percent: hasData ? '113,3 %' : '0 %', runrate: hasData ? '135,9%' : '0%', isNew: true },
         { id: 3, name: 'Объем вторичных цифровых продаж продуктов ММБ', weight: '30 %', fact: hasData ? 171780 : 0, plan: 131736, type: '=', maxPercent: '∞', percent: hasData ? '130,4 %' : '0 %', runrate: hasData ? '149,42%' : '0%' },
         { id: 4, name: 'Операционная прибыль от цифровых продаж СБ', weight: '30 %', fact: hasData ? 3.492 : 0, plan: 2.786, type: '=', maxPercent: '∞', percent: hasData ? '125,3 %' : '0 %', isNew: true },
       ],
@@ -788,6 +788,9 @@ export function RedCapPage({
                 {metrics.map((metric) => {
                   const percentValue = calculateMetricPercent(metric);
                   const percentColor = percentValue >= 100 ? 'text-green-400' : percentValue >= 80 ? 'text-yellow-400' : 'text-red-400';
+                  const relatedMmbRunrate = metric.id === 2
+                    ? metrics.find((candidate) => candidate.id === 3)?.runrate
+                    : null;
                   
                   return (
                     <tr key={metric.id} className="border-b border-gray-800/30 last:border-0">
@@ -806,12 +809,12 @@ export function RedCapPage({
                             {metric.hasAlert && <span className="text-red-400 text-xs ml-2">!!!</span>}
                           </span>
                         )}
-                        {metric.runrate && (
+                        {(metric.runrate || metric.id === 2) && (
                           <div className="text-xs text-gray-500 mt-1">
                             {isEditing ? (
                               <input
                                 type="text"
-                                value={metric.runrate}
+                                value={metric.runrate || ''}
                                 onChange={(e) => handleEditMetric(setter, metric.id, 'runrate', e.target.value)}
                                 className="w-32 bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-gray-400"
                                 placeholder="Runrate"
@@ -819,6 +822,11 @@ export function RedCapPage({
                             ) : (
                               `Runrate: ${metric.runrate}`
                             )}
+                          </div>
+                        )}
+                        {!isEditing && metric.id === 2 && relatedMmbRunrate && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Объем вторичных цифровых продаж продуктов ММБ (runrate {relatedMmbRunrate})
                           </div>
                         )}
                       </td>
@@ -939,6 +947,9 @@ export function RedCapPage({
             {metrics.map((metric) => {
               const percentValue = calculateMetricPercent(metric);
               const percentColor = percentValue >= 100 ? 'text-green-400' : percentValue >= 80 ? 'text-yellow-400' : 'text-red-400';
+              const relatedMmbRunrate = metric.id === 2
+                ? metrics.find((candidate) => candidate.id === 3)?.runrate
+                : null;
               
               return (
                 <div key={metric.id} className="border-b border-gray-800/30 last:border-0 pb-4 last:pb-0">
@@ -957,9 +968,14 @@ export function RedCapPage({
                           {metric.hasAlert && <span className="text-red-400 text-xs ml-2">!!!</span>}
                         </span>
                       )}
-                      {metric.runrate && !isEditing && (
+                      {(metric.runrate || metric.id === 2) && !isEditing && (
                         <div className="text-xs text-gray-500 mt-1">
-                          Runrate: {metric.runrate}
+                          Runrate: {metric.runrate || '—'}
+                        </div>
+                      )}
+                      {!isEditing && metric.id === 2 && relatedMmbRunrate && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          Объем вторичных цифровых продаж продуктов ММБ (runrate {relatedMmbRunrate})
                         </div>
                       )}
                     </div>
@@ -1054,12 +1070,12 @@ export function RedCapPage({
                           placeholder="∞"
                         />
                       </div>
-                      {metric.runrate && (
+                      {(metric.runrate || metric.id === 2) && (
                         <div className="col-span-2">
                           <span className="text-gray-500 text-xs">Runrate</span>
                           <input
                             type="text"
-                            value={metric.runrate}
+                            value={metric.runrate || ''}
                             onChange={(e) => handleEditMetric(setter, metric.id, 'runrate', e.target.value)}
                             className="w-full bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-gray-400"
                           />
