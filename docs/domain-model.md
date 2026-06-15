@@ -33,9 +33,32 @@ Key rules:
 - Shared for all users.
 - Singleton data semantics in DB.
 - Conflict-safe save and realtime sync.
+- Living dashboard reads the nearest future event from this same shared source.
+- Event status on living dashboard is normalized against the event date:
+  - past events are treated as `passed`
+  - same-day future lookup shows `сегодня`
 
 ### Menu Configuration
 Defines visible menu items and custom pages for all users.
+
+### Living Dashboard View Model
+Represents the shared executive page available at `/living-dashboard`.
+
+Fields / derived blocks:
+- `redcapMetrics[]` — weighted summary of Красная шапочка sections
+- `kpiMetrics[]` — score-card metrics derived from digital metrics
+- `focusConfig`
+- `nearestFutureEvent`
+
+Business rules:
+- page is quarter-aware for data loading, but trend comparison is weekly inside the same quarter
+- KPI `MAU Spotlight` uses Red Cap `runrate` with a hard cap of `120%`
+- KPI `Продажи ММБ` uses Red Cap `runrate` with a hard cap of `150%`
+- VOC score is normalized as:
+  - `< 4.75` => `80%`
+  - `4.75..4.78` inclusive => `100%`
+  - `> 4.78` => `110%`
+- personnel/people summary value is sourced from `eNPS`
 
 ### MBO Page
 Represents a shared executive MBO screen available at `/mbo`.

@@ -13,6 +13,26 @@
 - `ksh_cdpo_widgets`
 - `presentations_packages`
 
+## Dashboard Persistence Model
+
+### Postgres payload for Красная шапочка dashboard
+The quarter dashboard payload stores not only the visible widget data, but also derived history needed by `/living-dashboard`.
+
+Key JSON fields:
+- `digitalMetrics`
+- `stabilityMetrics`
+- `productionMetrics`
+- `vocData`
+- `enpsData`
+- `totalsConfig`
+- `trendHistory[]`
+
+Behavior notes:
+- `trendHistory` is appended on save when the current snapshot differs from the latest stored snapshot
+- history is kept per current quarter payload and trimmed to the latest 26 snapshots
+- living dashboard uses the previous snapshot in `trendHistory` as the baseline for weekly trend deltas
+- runrate values for score-card metrics are persisted in the dashboard payload and then reused by living dashboard KPI calculations
+
 ## MBO Persistence Model
 
 ### Postgres (`mbo_pages`)

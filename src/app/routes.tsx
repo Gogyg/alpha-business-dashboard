@@ -5,6 +5,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Metrics } from "./pages/Metrics";
 import { Goals } from "./pages/Goals";
 import { EventsDashboard } from "./pages/EventsDashboard";
+import { LivingDashboard } from "./pages/LivingDashboard";
 import { KshCdpoPage } from "./pages/KshCdpoPage";
 import { KshCdpoDashboard } from "./pages/KshCdpoDashboard";
 import { PresentationsPage } from "./pages/PresentationsPage";
@@ -81,6 +82,7 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, Component: Dashboard },
+      { path: "living-dashboard", Component: LivingDashboard },
       { path: "mbo", Component: MboPage },
       { path: "dashboard", Component: EventsDashboard },
       { path: "metrics", Component: Metrics },

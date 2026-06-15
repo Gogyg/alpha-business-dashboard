@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
-import { BarChart3, Target, ChevronLeft, ChevronRight, Edit3, X, Goal, Download, LogOut, CalendarDays, Settings, EyeOff, Eye, Save, TrendingUp, GripVertical, Plus, FileText, Trash2 } from 'lucide-react';
+import { BarChart3, Target, ChevronLeft, ChevronRight, Edit3, X, Goal, Download, LogOut, CalendarDays, Settings, EyeOff, Eye, Save, TrendingUp, GripVertical, Plus, FileText, Trash2, LayoutDashboard } from 'lucide-react';
 import { useEffect, useMemo, useState, type DragEvent } from 'react';
 import logoImage from '../../assets/5b6ead3363f3911c8fbce32735c6a3c819462945.png';
 import * as XLSX from 'xlsx';
@@ -7,7 +7,7 @@ import { authAPI, getCurrentUser, goalsAPI, menuAPI } from '../utils/api';
 import { PasswordModal } from './PasswordModal';
 
 interface MenuItemConfig {
-  id: 'scorecard' | 'mbo' | 'events' | 'metrics' | 'goals' | 'ksh-cdpo' | 'presentations';
+  id: 'scorecard' | 'living-dashboard' | 'mbo' | 'events' | 'metrics' | 'goals' | 'ksh-cdpo' | 'presentations';
   label: string;
   hidden?: boolean;
   order: number;
@@ -27,16 +27,18 @@ interface MenuConfigPayload {
 
 const DEFAULT_MENU: MenuItemConfig[] = [
   { id: 'scorecard', label: 'Красная шапочка', order: 1 },
-  { id: 'events', label: 'Дашборд', order: 2 },
+  { id: 'living-dashboard', label: 'Дашборд', order: 2 },
   { id: 'mbo', label: 'MBO', order: 3 },
-  { id: 'metrics', label: 'Важные метрики', order: 4 },
-  { id: 'goals', label: 'Цели квартала', order: 5 },
-  { id: 'ksh-cdpo', label: 'КШ CDPO', order: 6 },
-  { id: 'presentations', label: 'Презентации', order: 7 },
+  { id: 'events', label: 'Календарь', order: 4 },
+  { id: 'metrics', label: 'Важные метрики', order: 5 },
+  { id: 'goals', label: 'Цели квартала', order: 6 },
+  { id: 'ksh-cdpo', label: 'КШ CDPO', order: 7 },
+  { id: 'presentations', label: 'Презентации', order: 8 },
 ];
 
 const MENU_META = {
   scorecard: { path: '/', icon: Target },
+  'living-dashboard': { path: '/living-dashboard', icon: LayoutDashboard },
   events: { path: '/dashboard', icon: CalendarDays },
   mbo: { path: '/mbo', icon: BarChart3 },
   metrics: { path: '/metrics', icon: BarChart3 },
@@ -106,8 +108,10 @@ export function Layout() {
   };
   const isEventsDashboard = isActive('/dashboard');
   const isMboPage = isActive('/mbo');
+  const isLivingDashboard = isActive('/living-dashboard');
   const showEditButton =
     isActive('/') ||
+    isActive('/living-dashboard') ||
     isActive('/mbo') ||
     isActive('/metrics') ||
     isActive('/presentations') ||
@@ -787,14 +791,39 @@ export function Layout() {
                       <span className="hidden sm:inline">Выгрузить</span>
                     </button>
                   ) : showEditButton ? (
-                    <button
-                      onClick={() => setIsEditingMode(!isEditingMode)}
-                      className={`${
-                        isEditingMode ? 'bg-white/5 hover:bg-white/10 border border-white/10' : 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-600 border border-red-500/50 shadow-lg shadow-red-500/30 ring-2 ring-red-500/20'
-                      } text-white h-full w-full rounded-xl flex items-center gap-2.5 transition-all shadow-xl justify-center text-sm font-bold backdrop-blur-xl hover:scale-105 active:scale-95`}
-                    >
-                      {isEditingMode ? <><X size={18} />Отменить</> : <><Edit3 size={18} />Редактировать</>}
-                    </button>
+                    isLivingDashboard && isEditingMode ? (
+                      <div className="h-full w-full flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            window.dispatchEvent(new CustomEvent('living-dashboard-cancel'));
+                            setIsEditingMode(false);
+                          }}
+                          className="bg-white/5 hover:bg-white/10 border border-white/10 text-white h-full flex-1 rounded-xl flex items-center gap-2.5 transition-all shadow-xl justify-center text-sm font-bold backdrop-blur-xl"
+                        >
+                          <X size={18} />
+                          Отменить
+                        </button>
+                        <button
+                          onClick={() => {
+                            window.dispatchEvent(new CustomEvent('living-dashboard-save'));
+                            setIsEditingMode(false);
+                          }}
+                          className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 border border-emerald-500/50 text-white h-full flex-1 rounded-xl flex items-center gap-2.5 transition-all shadow-xl shadow-emerald-500/20 justify-center text-sm font-bold backdrop-blur-xl"
+                        >
+                          <Save size={18} />
+                          Сохранить
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setIsEditingMode(!isEditingMode)}
+                        className={`${
+                          isEditingMode ? 'bg-white/5 hover:bg-white/10 border border-white/10' : 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-600 border border-red-500/50 shadow-lg shadow-red-500/30 ring-2 ring-red-500/20'
+                        } text-white h-full w-full rounded-xl flex items-center gap-2.5 transition-all shadow-xl justify-center text-sm font-bold backdrop-blur-xl hover:scale-105 active:scale-95`}
+                      >
+                        {isEditingMode ? <><X size={18} />Отменить</> : <><Edit3 size={18} />Редактировать</>}
+                      </button>
+                    )
                   ) : (
                     <div className="h-full w-full" aria-hidden="true" />
                   )}
