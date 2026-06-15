@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext } from "react-router";
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer } from "recharts";
-import { dashboardAPI } from "../utils/api";
+import { format, isSameDay, isWeekend, startOfDay } from "date-fns";
+import { dashboardAPI, eventsAPI } from "../utils/api";
 
 interface OutletContext {
   currentQuarter: string;
@@ -25,6 +26,21 @@ interface LivingFocusConfig {
   items: string[];
 }
 
+type EventStatus = "not_started" | "in_progress" | "ready" | "passed";
+type EventColor = "green" | "emerald" | "blue" | "violet" | "red" | "amber";
+type CalendarKey = "directorate" | "prp" | "other";
+
+interface CalendarEventItem {
+  id: string;
+  title: string;
+  description: string;
+  date: Date;
+  color: EventColor;
+  status: EventStatus;
+  updatedAt: string;
+  calendarKey: CalendarKey;
+}
+
 const parsePercentFromAny = (value: unknown, fallback = 0) => {
   if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
   const raw = String(value ?? "").replace("%", "").replace(",", ".").trim();
@@ -32,16 +48,151 @@ const parsePercentFromAny = (value: unknown, fallback = 0) => {
   return Number.isFinite(numeric) ? numeric : fallback;
 };
 
-const quarterOrder = ["Q1", "Q2", "Q3", "Q4"];
+const EVENT_COLORS: EventColor[] = ["green", "emerald", "blue", "violet", "red", "amber"];
 
-const getPreviousQuarter = (quarter: string) => {
-  const index = quarterOrder.indexOf(quarter);
-  return index > 0 ? quarterOrder[index - 1] : null;
+const isEventColor = (value: unknown): value is EventColor =>
+  typeof value === "string" && EVENT_COLORS.includes(value as EventColor);
+
+const normalizeStatus = (value: unknown): EventStatus => {
+  if (value === "not_started" || value === "in_progress" || value === "ready" || value === "passed") return value;
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (v.includes("не нач")) return "not_started";
+    if (v.includes("готов")) return "ready";
+    if (v.includes("работ")) return "in_progress";
+    if (v.includes("пройден")) return "passed";
+  }
+  return "in_progress";
+};
+
+const STATUS_LABELS: Record<EventStatus, string> = {
+  not_started: "Подготовка не начата",
+  in_progress: "В работе",
+  ready: "Готовы к событию",
+  passed: "Пройдено",
+};
+
+const deriveEventTitle = (description: string, fallback = "Событие") => {
+  const clean = description.trim();
+  if (!clean) return fallback;
+  const firstLine = clean.split("\n")[0].trim().replace(/[.!?]+$/, "");
+  if (!firstLine) return fallback;
+  return firstLine.length > 58 ? `${firstLine.slice(0, 55)}...` : firstLine;
+};
+
+const PRODUCTION_CALENDAR_2026_NON_WORKING_DAYS = new Set<string>([
+  "2026-01-01",
+  "2026-01-02",
+  "2026-01-03",
+  "2026-01-04",
+  "2026-01-05",
+  "2026-01-06",
+  "2026-01-07",
+  "2026-01-08",
+  "2026-01-09",
+  "2026-02-23",
+  "2026-03-08",
+  "2026-03-09",
+  "2026-05-01",
+  "2026-05-09",
+  "2026-05-11",
+  "2026-06-12",
+  "2026-11-04",
+  "2026-12-31",
+]);
+
+const makeHolidayKeys = (year: number) => {
+  if (year === 2026) return Array.from(PRODUCTION_CALENDAR_2026_NON_WORKING_DAYS);
+
+  const statutoryDays: Array<[number, number]> = [
+    [1, 1], [1, 2], [1, 3], [1, 4], [1, 5], [1, 6], [1, 7], [1, 8],
+    [2, 23],
+    [3, 8],
+    [5, 1], [5, 9],
+    [6, 12],
+    [11, 4],
+  ];
+
+  return statutoryDays.map(([month, day]) => format(new Date(year, month - 1, day), "yyyy-MM-dd"));
+};
+
+const countWorkingDaysUntil = (from: Date, to: Date, holidayKeys: Set<string>) => {
+  const start = startOfDay(from);
+  const end = startOfDay(to);
+  if (end.getTime() <= start.getTime()) return 0;
+
+  const cursor = new Date(start);
+  let count = 0;
+
+  while (cursor < end) {
+    cursor.setDate(cursor.getDate() + 1);
+    const key = format(cursor, "yyyy-MM-dd");
+    if (!isWeekend(cursor) && !holidayKeys.has(key)) {
+      count += 1;
+    }
+  }
+
+  return count;
+};
+
+const isPastEventDate = (date: Date, today: Date) => startOfDay(date).getTime() < today.getTime();
+
+const normalizeEventStatusByDate = (status: EventStatus, date: Date, today: Date): EventStatus => {
+  if (isPastEventDate(date, today)) return "passed";
+  return status === "passed" ? "not_started" : status;
+};
+
+const normalizeCalendarKey = (value: unknown): CalendarKey => {
+  if (value === "directorate" || value === "prp" || value === "other") return value;
+  return "directorate";
 };
 
 const toNumber = (value: unknown, fallback = 0) => {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
+};
+
+interface DashboardTrendSnapshot {
+  savedAt: string;
+  totals: {
+    scoreCard: number;
+    stability: number;
+    production: number;
+    voc: number;
+    personnel: number;
+  };
+  scoreCardMetrics: Array<{
+    id: number;
+    value: number;
+  }>;
+}
+
+const normalizeDashboardTrendHistory = (raw: any): DashboardTrendSnapshot[] => {
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((item) => {
+      const totals = item?.totals || {};
+      const scoreCardMetrics = Array.isArray(item?.scoreCardMetrics) ? item.scoreCardMetrics : [];
+
+      return {
+        savedAt: typeof item?.savedAt === "string" && item.savedAt.trim() ? item.savedAt : new Date().toISOString(),
+        totals: {
+          scoreCard: toNumber(totals.scoreCard),
+          stability: toNumber(totals.stability),
+          production: toNumber(totals.production),
+          voc: toNumber(totals.voc),
+          personnel: toNumber(totals.personnel),
+        },
+        scoreCardMetrics: scoreCardMetrics
+          .map((metric: any, index: number) => ({
+            id: toNumber(metric?.id, index + 1),
+            value: toNumber(metric?.value),
+          }))
+          .filter((metric: { id: number; value: number }) => metric.id > 0),
+      };
+    })
+    .sort((a, b) => new Date(a.savedAt).getTime() - new Date(b.savedAt).getTime());
 };
 
 const parseWeight = (value: unknown) => {
@@ -78,6 +229,14 @@ const calculateMetricPercent = (metric: any) => {
   return Math.max(0, Math.min(rawPercent, maxPercent));
 };
 
+const clampPercent = (value: number, max: number) => Math.max(0, Math.min(value, max));
+
+const evaluateVocScore = (nib: number) => {
+  if (nib < 4.75) return 80;
+  if (nib <= 4.78) return 100;
+  return 110;
+};
+
 const normalizeName = (name: string, fallback: string) => {
   const prepared = (name || "").trim();
   if (!prepared) return fallback;
@@ -111,7 +270,7 @@ const buildTotalsMetrics = (data: any) => {
   const scoreCardValue = kpiAverageScore;
   const stabilityValue = toNumber(overrides.stability || calculateSectionScore(stabilityMetrics));
   const productionValue = toNumber(overrides.production || calculateSectionScore(productionMetrics));
-  const vocValue = toNumber(overrides.voc || (vocNib >= 4.75 ? 100 : 0));
+  const vocValue = toNumber(overrides.voc || evaluateVocScore(vocNib));
   const personnelValue = toNumber(overrides.personnel || 100);
 
   return [
@@ -137,10 +296,14 @@ const buildScoreCardMetrics = (data: any) => {
     .slice(0, 4)
     .map((metric: any, index: number) => {
       const id = toNumber(metric?.id, index + 1);
-      const runrate = parsePercentFromAny(metric?.runrate, Math.round(calculateMetricPercent(metric)));
+      const rawRunrate = parsePercentFromAny(metric?.runrate, Math.round(calculateMetricPercent(metric)));
+      const normalizedRunrate =
+        id === 2 ? clampPercent(rawRunrate, 120) :
+        id === 3 ? clampPercent(rawRunrate, 150) :
+        rawRunrate;
       const valueByRule =
         id === 2 || id === 3
-          ? Math.round(runrate)
+          ? Math.round(normalizedRunrate)
           : Math.round(calculateMetricPercent(metric));
       return {
         id,
@@ -156,10 +319,19 @@ const getWeightedScore = (metrics: MetricPoint[]) => {
   return Math.round(total);
 };
 
-const splitLabelToTwoLines = (name: string) => {
+const splitLabelToTwoLines = (name: string, maxChars = 12, maxLines = 3) => {
   const prepared = name.replace(/\//g, "/ ").replace(/\s+/g, " ").trim();
-  const words = prepared.split(" ");
-  const maxChars = 12;
+  const words = prepared
+    .split(" ")
+    .flatMap((word) => {
+      if (word.length <= maxChars) return [word];
+      const chunks: string[] = [];
+      for (let index = 0; index < word.length; index += maxChars) {
+        chunks.push(word.slice(index, index + maxChars));
+      }
+      return chunks;
+    })
+    .filter(Boolean);
   const lines: string[] = [];
   let current = "";
 
@@ -170,17 +342,17 @@ const splitLabelToTwoLines = (name: string) => {
     } else {
       lines.push(current);
       current = word;
-      if (lines.length === 2) break;
+      if (lines.length === maxLines - 1) break;
     }
   }
 
-  if (lines.length < 3 && current) lines.push(current);
+  if (lines.length < maxLines && current) lines.push(current);
   if (lines.length === 1 && words.length > 1) {
     const remainder = words.slice(lines[0].split(" ").length).join(" ");
     if (remainder) lines.push(remainder.slice(0, maxChars));
   }
 
-  return lines.slice(0, 3);
+  return lines.slice(0, maxLines);
 };
 
 function RadarAxisTick(props: any) {
@@ -190,37 +362,56 @@ function RadarAxisTick(props: any) {
   const value = parsePercentFromAny(metric?.value, 0);
   const weight = parsePercentFromAny(metric?.weight, 0);
   const trend = typeof metric?.trend === "number" ? metric.trend : null;
-  const lines = splitLabelToTwoLines(name);
+  const isNarrowChart = chartWidth > 0 && chartWidth < 420;
+  const lines = splitLabelToTwoLines(name, isNarrowChart ? 8 : 12, 3);
   const cx = toNumber(props?.cx);
   const cy = toNumber(props?.cy);
   const vx = x - cx;
   const vy = y - cy;
   const length = Math.hypot(vx, vy) || 1;
-  const baseOffset = vy < -0.2 * length ? 24 : 14;
-  const labelOffset = baseOffset * labelScale;
-  const rawX = x + (vx / length) * labelOffset;
-  const ly = y + (vy / length) * labelOffset;
-  const dynamicAnchor = "middle";
-  const safePadding = Math.max(46, Math.round(56 * labelScale));
+  const horizontalBias = vx / length;
+  const verticalBias = vy / length;
+  const isSideLabel = Math.abs(horizontalBias) > 0.46;
+  const isTopLabel = verticalBias < -0.72;
+  const isBottomLabel = verticalBias > 0.72;
+  const baseOffset = isTopLabel ? (isNarrowChart ? 42 : 32) : isBottomLabel ? (isNarrowChart ? 18 : 16) : (isNarrowChart ? 14 : 14);
+  const sideOffset = isSideLabel ? (isNarrowChart ? 18 : 18) : 0;
+  const labelOffset = (baseOffset + sideOffset) * labelScale;
+  const anchorNudge = isSideLabel ? Math.sign(horizontalBias) * (isNarrowChart ? 12 : 12) * labelScale : 0;
+  const rawX = x + horizontalBias * labelOffset + anchorNudge;
+  const verticalNudge = isSideLabel
+    ? (isNarrowChart ? (verticalBias > 0.15 ? 8 : verticalBias < -0.15 ? -8 : -2) : 0)
+    : isTopLabel
+      ? (isNarrowChart ? -14 : -8)
+    : isBottomLabel
+      ? (isNarrowChart ? 6 : 0)
+      : 0;
+  const ly = y + verticalBias * labelOffset + verticalNudge * labelScale;
+  const dynamicAnchor = isSideLabel
+    ? (horizontalBias > 0 ? "start" : "end")
+    : "middle";
+  const safePadding = Math.max(isNarrowChart ? 54 : 46, Math.round((isNarrowChart ? 64 : 56) * labelScale));
   const lx =
     chartWidth > 0
       ? Math.max(safePadding, Math.min(chartWidth - safePadding, rawX))
       : rawX;
-  const valueFontSize = Math.max(14, Math.round(19 * labelScale));
-  const titleFontSize = Math.max(9, Math.round(10 * labelScale));
-  const metaFontSize = Math.max(8, Math.round(9 * labelScale));
-  const lineGap1 = Math.max(11, Math.round(14 * labelScale));
-  const lineGap2 = Math.max(10, Math.round(12 * labelScale));
-  const lineGap3 = Math.max(9, Math.round(11 * labelScale));
+  const valueFontSize = Math.max(isNarrowChart ? 12 : 14, Math.round((isNarrowChart ? 16 : 19) * labelScale));
+  const titleFontSize = Math.max(8, Math.round((isNarrowChart ? 8.5 : 10) * labelScale));
+  const metaFontSize = Math.max(isNarrowChart ? 8 : 9, Math.round((isNarrowChart ? 8.5 : 10) * labelScale));
+  const lineGap1 = Math.max(9, Math.round((isNarrowChart ? 11 : 14) * labelScale));
+  const lineGap2 = Math.max(8, Math.round((isNarrowChart ? 10 : 12) * labelScale));
+  const lineGap3 = Math.max(8, Math.round((isNarrowChart ? 9 : 11) * labelScale));
 
   return (
     <text x={lx} y={ly} textAnchor={dynamicAnchor}>
       <tspan x={lx} dy={0} fill="rgba(255,255,255,0.96)" fontSize={valueFontSize} fontWeight={800}>
         {value}%
       </tspan>
-      <tspan x={lx} dy={lineGap1} fill="rgba(255,255,255,0.8)" fontSize={titleFontSize} fontWeight={600}>
-        {lines.join(" ")}
-      </tspan>
+      {lines.map((line, index) => (
+        <tspan key={`${name}-line-${index}`} x={lx} dy={index === 0 ? lineGap1 : lineGap2} fill="rgba(255,255,255,0.8)" fontSize={titleFontSize} fontWeight={600}>
+          {line}
+        </tspan>
+      ))}
       <tspan x={lx} dy={lineGap2} fill="rgba(0,212,255,0.72)" fontSize={metaFontSize} fontWeight={700}>
         Вес {weight}%
       </tspan>
@@ -301,8 +492,18 @@ function ScoreWidget({
     () => Object.fromEntries(data.map((item) => [item.name, item])),
     [data],
   );
-  const adaptiveLabelScale = containerWidth < 360 ? 0.68 : containerWidth < 500 ? 0.82 : 1;
-  const adaptiveOuterRadius = containerWidth < 360 ? "63%" : containerWidth < 500 ? "69%" : chartOuterRadius;
+  const isCompactChart = containerWidth > 0 && containerWidth < 420;
+  const adaptiveLabelScale = containerWidth < 360 ? 0.64 : containerWidth < 420 ? 0.72 : containerWidth < 500 ? 0.82 : 1;
+  const adaptiveOuterRadius =
+    containerWidth < 360 ? "52%" : containerWidth < 420 ? "56%" : containerWidth < 500 ? "64%" : chartOuterRadius;
+  const adaptiveChartMargin =
+    containerWidth < 360
+      ? { top: 44, right: 78, bottom: 44, left: 78 }
+      : containerWidth < 420
+        ? { top: 38, right: 70, bottom: 38, left: 70 }
+        : containerWidth < 500
+          ? { top: 28, right: 50, bottom: 28, left: 50 }
+          : chartMargin;
 
   useEffect(() => {
     const node = containerRef.current;
@@ -328,7 +529,7 @@ function ScoreWidget({
 
       <div className={chartHeightClass}>
         <ResponsiveContainer width="100%" height="100%">
-          <RadarChart data={data} outerRadius={adaptiveOuterRadius} margin={chartMargin}>
+          <RadarChart data={data} outerRadius={adaptiveOuterRadius} margin={adaptiveChartMargin}>
             <PolarGrid stroke="rgba(255,255,255,0.07)" />
             <PolarAngleAxis
               dataKey="name"
@@ -346,10 +547,12 @@ function ScoreWidget({
         </ResponsiveContainer>
 
         <div className="center-score">
-          <div className="score-value" style={{ color: accent }}>
+          <div className="score-value" style={{ color: accent, fontSize: isCompactChart ? 24 : undefined }}>
             {animatedScore}%
           </div>
-          <div className="score-label">{scoreLabel}</div>
+          <div className="score-label" style={{ maxWidth: isCompactChart ? 72 : undefined, fontSize: isCompactChart ? 8 : undefined }}>
+            {scoreLabel}
+          </div>
         </div>
       </div>
 
@@ -380,6 +583,7 @@ function ScoreWidget({
 
 export function LivingDashboard() {
   const { currentQuarter, currentYear, isEditingMode } = useOutletContext<OutletContext>();
+  const today = useMemo(() => startOfDay(new Date()), []);
 
   const [redcapMetrics, setRedcapMetrics] = useState<MetricPoint[]>([
     { name: "Скор-карта", value: 0, weight: 30 },
@@ -404,6 +608,43 @@ export function LivingDashboard() {
     mode: "attention",
     items: ["Runrate цифровых продаж", "Удержание ключевых клиентов", "Сроки поставок компонентов"],
   });
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>([]);
+
+  const holidayKeys = useMemo(() => {
+    const years = new Set<number>([today.getFullYear(), today.getFullYear() + 1]);
+    return new Set(Array.from(years).flatMap((year) => makeHolidayKeys(year)));
+  }, [today]);
+
+  const nearestFutureEvent = useMemo(
+    () =>
+      calendarEvents
+        .filter((event) => startOfDay(event.date).getTime() >= today.getTime())
+        .sort((a, b) => a.date.getTime() - b.date.getTime() || a.id.localeCompare(b.id))[0] ?? null,
+    [calendarEvents, today],
+  );
+
+  const nearestEventWorkingDays = useMemo(() => {
+    if (!nearestFutureEvent) return null;
+    return countWorkingDaysUntil(today, nearestFutureEvent.date, holidayKeys);
+  }, [holidayKeys, nearestFutureEvent, today]);
+
+  const nearestEventCountdown = useMemo(() => {
+    if (!nearestFutureEvent) return { value: "—", suffix: "событий нет" };
+    if (isSameDay(nearestFutureEvent.date, today)) {
+      return { value: "сегодня", suffix: "" };
+    }
+
+    const workingDays = nearestEventWorkingDays ?? 0;
+    const mod10 = workingDays % 10;
+    const mod100 = workingDays % 100;
+    let suffix = "раб. дней";
+    if (mod10 === 1 && mod100 !== 11) suffix = "раб. день";
+    else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) suffix = "раб. дня";
+
+    return { value: String(workingDays), suffix };
+  }, [nearestEventWorkingDays, nearestFutureEvent, today]);
+
+  const nearestEventStatusLabel = nearestFutureEvent ? STATUS_LABELS[nearestFutureEvent.status] : "Нет событий";
 
   const saveFocusConfig = async (nextConfig: LivingFocusConfig) => {
     try {
@@ -424,14 +665,24 @@ export function LivingDashboard() {
     const load = async () => {
       try {
         const currentData = (await dashboardAPI.get(currentQuarter)) || {};
-        const previousQuarter = getPreviousQuarter(currentQuarter);
-        const previousData = previousQuarter ? (await dashboardAPI.get(previousQuarter)) || {} : {};
 
         if (!mounted) return;
 
+        const trendHistory = normalizeDashboardTrendHistory(currentData?.trendHistory);
+        const previousSnapshot = trendHistory.length > 1 ? trendHistory[trendHistory.length - 2] : null;
+
         const currentTotals = buildTotalsMetrics(currentData);
-        const previousTotals = buildTotalsMetrics(previousData);
-        const prevTotalsMap = new Map(previousTotals.map((item) => [item.id, item.value]));
+        const prevTotalsMap = new Map<string, number>(
+          previousSnapshot
+            ? [
+                ["scoreCard", previousSnapshot.totals.scoreCard],
+                ["stability", previousSnapshot.totals.stability],
+                ["production", previousSnapshot.totals.production],
+                ["voc", previousSnapshot.totals.voc],
+                ["personnel", previousSnapshot.totals.personnel],
+              ]
+            : [],
+        );
         setRedcapMetrics(
           currentTotals.map((item) => ({
             name: item.name,
@@ -442,8 +693,9 @@ export function LivingDashboard() {
         );
 
         const currentScoreCard = buildScoreCardMetrics(currentData);
-        const previousScoreCard = buildScoreCardMetrics(previousData);
-        const prevScoreById = new Map(previousScoreCard.map((item: any) => [item.id, item.value]));
+        const prevScoreById = new Map<number, number>(
+          previousSnapshot?.scoreCardMetrics.map((item) => [item.id, item.value]) || [],
+        );
         if (currentScoreCard.length > 0) {
           setKpiMetrics(
             currentScoreCard.map((item: any) => ({
@@ -489,6 +741,68 @@ export function LivingDashboard() {
       mounted = false;
     };
   }, [currentQuarter]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const parseStorageEvents = (rawEvents: any[]): CalendarEventItem[] =>
+      rawEvents.map((item: any, index: number) => {
+        const rawDate = typeof item.date === "string" ? item.date : "";
+        const parsedDate = rawDate
+          ? new Date(`${rawDate}T00:00:00`)
+          : item.date instanceof Date
+            ? item.date
+            : new Date();
+
+        const description =
+          typeof item.description === "string"
+            ? item.description
+            : typeof item.title === "string"
+              ? item.title
+              : "";
+
+        const status = normalizeEventStatusByDate(normalizeStatus(item.status), parsedDate, today);
+        const normalizedId =
+          typeof item.id === "string" && item.id.trim().length > 0
+            ? item.id.trim()
+            : typeof item.id === "number" && Number.isFinite(item.id)
+              ? String(item.id)
+              : `calendar-event-${index}`;
+
+        return {
+          id: normalizedId,
+          title:
+            typeof item.title === "string" && item.title.trim().length > 0
+              ? item.title.trim()
+              : deriveEventTitle(description, "Событие"),
+          description: description.trim(),
+          date: parsedDate,
+          color: isEventColor(item.color) ? item.color : "blue",
+          status,
+          updatedAt: typeof item.updatedAt === "string" && item.updatedAt.trim() ? item.updatedAt : new Date().toISOString(),
+          calendarKey: normalizeCalendarKey(item.calendarKey),
+        };
+      });
+
+    const loadEvents = async () => {
+      try {
+        const source = await eventsAPI.get();
+        if (!mounted) return;
+        setCalendarEvents(parseStorageEvents(Array.isArray(source) ? source : []));
+      } catch (error) {
+        console.error("Failed to load calendar events for living dashboard:", error);
+        if (mounted) setCalendarEvents([]);
+      }
+    };
+
+    loadEvents();
+    const unsubscribe = eventsAPI.subscribe(loadEvents);
+
+    return () => {
+      mounted = false;
+      unsubscribe?.();
+    };
+  }, [today]);
 
   useEffect(() => {
     const handleSave = async () => {
@@ -711,9 +1025,19 @@ export function LivingDashboard() {
         .voc-caption { color: rgba(255,255,255,0.86); font-size: 14px; margin-top: 8px; font-weight: 600; }
         .voc-plan { color: rgba(255,255,255,0.56); font-size: 12px; margin-top: 6px; }
         .event-header { color: rgba(255, 255, 255, 0.6); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
-        .event-title { color: #ffffff; font-size: 18px; font-weight: 700; line-height: 1.3; margin-bottom: 8px; }
+        .event-title {
+          color: #ffffff;
+          font-size: 18px;
+          font-weight: 700;
+          line-height: 1.3;
+          margin-bottom: 8px;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
         .event-timer { color: #00d4ff; font-size: 24px; font-weight: 800; margin: 8px 0; }
-        .event-timer span { font-size: 13px; color: rgba(255, 255, 255, 0.5); font-weight: 500; margin-left: 4px; }
+        .event-timer span { font-size: 13px; color: rgba(255, 255, 255, 0.5); font-weight: 500; margin: 0 4px 0 0; }
         .status-badge {
           display: inline-flex;
           align-items: center;
@@ -724,16 +1048,36 @@ export function LivingDashboard() {
           font-weight: 600;
           margin-top: 8px;
           width: fit-content;
-          background: rgba(0, 212, 160, 0.15);
-          color: #00d4a0;
-          border: 1px solid rgba(0, 212, 160, 0.3);
+          background: rgba(255, 255, 255, 0.08);
+          color: rgba(255, 255, 255, 0.86);
+          border: 1px solid rgba(255, 255, 255, 0.12);
         }
         .status-dot {
           width: 6px;
           height: 6px;
-          background: #00d4a0;
+          background: currentColor;
           border-radius: 50%;
           animation: pulseDot 2s infinite;
+        }
+        .status-badge.not_started {
+          color: #cbd5e1;
+          background: rgba(148, 163, 184, 0.16);
+          border-color: rgba(148, 163, 184, 0.3);
+        }
+        .status-badge.in_progress {
+          color: #00d4a0;
+          background: rgba(0, 212, 160, 0.15);
+          border-color: rgba(0, 212, 160, 0.3);
+        }
+        .status-badge.ready {
+          color: #8cfcc8;
+          background: rgba(34, 197, 94, 0.16);
+          border-color: rgba(34, 197, 94, 0.3);
+        }
+        .status-badge.passed {
+          color: #7dd3fc;
+          background: rgba(14, 165, 233, 0.15);
+          border-color: rgba(14, 165, 233, 0.28);
         }
         .focus-label {
           color: rgba(255, 255, 255, 0.5);
@@ -748,33 +1092,31 @@ export function LivingDashboard() {
         .urgency-indicator {
           width: 10px;
           height: 10px;
-          background: #ff4757;
+          background: #d4af37;
           border-radius: 50%;
-          box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7);
+          box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7);
           animation: urgencyPulse 2s infinite;
           display: inline-block;
         }
         .focus-problem-list { list-style: none; padding: 0; margin: 0; }
         .focus-problem-list li {
           position: relative;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          gap: 8px;
+          display: block;
+          padding-left: 14px;
           margin-bottom: 10px;
           color: rgba(255, 255, 255, 0.85);
           font-size: 13px;
           line-height: 1.4;
           font-weight: 500;
-          text-align: center;
+          text-align: left;
         }
         .focus-attention-widget {
           justify-content: flex-start;
-          align-items: center;
-          text-align: center;
+          align-items: flex-start;
+          text-align: left;
         }
         .focus-attention-widget .focus-label {
-          justify-content: center;
+          justify-content: flex-start;
           margin-bottom: 8px;
         }
         .focus-attention-widget .focus-problem-list {
@@ -792,11 +1134,13 @@ export function LivingDashboard() {
         }
         .focus-problem-list li::before {
           content: "";
+          position: absolute;
+          left: 0;
+          top: calc(0.7em - 3px);
           width: 6px;
           height: 6px;
-          background: #ff4757;
+          background: #d4af37;
           border-radius: 50%;
-          flex: 0 0 auto;
         }
         .focus-problem-list li strong { color: #ffffff; font-weight: 600; }
         .focus-mode-switch {
@@ -973,14 +1317,26 @@ export function LivingDashboard() {
           <section className="widget-card small-widget">
             <div>
               <div className="event-header">Ближайшее событие</div>
-              <div className="event-title">Запуск нового продукта</div>
+              <div className="event-title">{nearestFutureEvent?.title || "Ближайших событий нет"}</div>
               <div className="event-timer">
-                <span>через </span>12<span>дней</span>
+                {nearestFutureEvent ? (
+                  nearestEventCountdown.value === "сегодня" ? (
+                    <>сегодня</>
+                  ) : (
+                    <>
+                      <span>через</span>
+                      {nearestEventCountdown.value}
+                      <span>{nearestEventCountdown.suffix}</span>
+                    </>
+                  )
+                ) : (
+                  <span>{nearestEventCountdown.suffix}</span>
+                )}
               </div>
             </div>
-            <div className="status-badge">
+            <div className={`status-badge ${nearestFutureEvent?.status || "not_started"}`}>
               <span className="status-dot" />
-              В работе
+              {nearestEventStatusLabel}
             </div>
           </section>
 

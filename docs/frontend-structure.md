@@ -21,6 +21,25 @@ Responsibilities:
 - auth/logout and menu settings
 - route-specific header behavior (for example, quarter switch hidden on `/mbo`)
 
+### Living Dashboard
+File: `src/app/pages/LivingDashboard.tsx`
+
+Responsibilities:
+- render the executive living dashboard at `/living-dashboard`
+- show two radar score widgets sourced from Красная шапочка data:
+  - `Красная шапочка`
+  - `KPI`
+- calculate weekly trend deltas from the current quarter `trendHistory` snapshots instead of comparing with previous quarters
+- show the nearest upcoming event using the shared `events` source that also powers Calendar
+- render the shared `Фокус внимания` widget with editable items and shared persistence
+
+UI behavior notes:
+- radar labels use adaptive multiline layout for narrow widths to avoid clipping/overlap
+- `MAU Spotlight` in KPI radar uses Red Cap `runrate`, capped at `120%`
+- `Продажи ММБ` in KPI radar uses Red Cap `runrate`, capped at `150%`
+- focus bullets use the gold accent style agreed for the living dashboard
+- nearest-event countdown is shown in working days and switches to `сегодня` for same-day events
+
 ### MBO
 File: `src/app/pages/MboPage.tsx`
 

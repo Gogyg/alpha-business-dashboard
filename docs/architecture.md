@@ -16,6 +16,32 @@
 - `presentations_packages` (metadata for presentation packages).
 - Storage bucket `presentations` (HTML pages and assets for presentation packages).
 
+## Living Dashboard Architecture
+Route: `/living-dashboard`
+
+### Read Flow
+1. Load the current quarter dashboard payload.
+2. Build weighted radar summaries for:
+   - Красная шапочка
+   - KPI
+3. Read `trendHistory` from the same quarter payload and compare against the previous saved snapshot to derive weekly deltas.
+4. Load shared events from `events` singleton storage.
+5. Pick the nearest upcoming event and compute working-day countdown.
+
+### Derived metric rules
+- KPI `MAU Spotlight` uses stored Red Cap `runrate`, capped at `120%`.
+- KPI `Продажи ММБ` uses stored Red Cap `runrate`, capped at `150%`.
+- VOC summary uses normalized thresholds:
+  - `< 4.75` => `80%`
+  - `4.75..4.78` => `100%`
+  - `> 4.78` => `110%`
+- personnel summary is sourced from `eNPS`.
+
+### Persistence coupling
+- living dashboard itself is mostly derived/read-only from the shared quarter dashboard payload
+- `focusConfig` is saved through the dashboard payload and must remain cross-session shared
+- nearest event is not duplicated locally; it is always derived from the shared `events` source
+
 ## MBO Architecture
 ### Metadata (Postgres)
 Table: `public.mbo_pages`

@@ -79,6 +79,146 @@ interface WidgetTitles {
   totals: string;
 }
 
+interface DashboardTrendSnapshot {
+  savedAt: string;
+  totals: {
+    scoreCard: number;
+    stability: number;
+    production: number;
+    voc: number;
+    personnel: number;
+  };
+  scoreCardMetrics: Array<{
+    id: number;
+    value: number;
+  }>;
+}
+
+const toTrendNumber = (value: unknown, fallback = 0) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+};
+
+const parseTrendWeight = (value: unknown) => {
+  const raw = String(value ?? '').replace('%', '').replace(',', '.').trim();
+  return toTrendNumber(raw);
+};
+
+const parseTrendMaxPercent = (value: string | undefined) => {
+  if (!value || value === '∞') return Infinity;
+  const cleaned = String(value).replace('∞', '').replace(',', '.').trim();
+  const numeric = parseFloat(cleaned);
+  return Number.isFinite(numeric) ? numeric : Infinity;
+};
+
+const calculateTrendMetricPercent = (metric: any) => {
+  const fact = toTrendNumber(metric?.fact);
+  const plan = toTrendNumber(metric?.plan);
+  const type = metric?.type || '=';
+  const maxPercent = parseTrendMaxPercent(metric?.maxPercent);
+
+  if (plan <= 0 && fact <= 0) return 0;
+  if (plan <= 0) return 0;
+
+  let rawPercent = 0;
+  if (type === '<=' || type === '<') {
+    rawPercent = fact > 0 ? (plan / fact) * 100 : 100;
+  } else {
+    rawPercent = (fact / plan) * 100;
+  }
+
+  return Math.max(0, Math.min(rawPercent, maxPercent));
+};
+
+const evaluateVocScore = (nib: number) => {
+  if (nib < 4.75) return 80;
+  if (nib <= 4.78) return 100;
+  return 110;
+};
+
+const calculateTrendSectionScore = (metrics: any[]) => {
+  let totalWeight = 0;
+  let totalScore = 0;
+
+  metrics.forEach((metric) => {
+    const weight = parseTrendWeight(metric?.weight) / 100;
+    const percent = calculateTrendMetricPercent(metric) / 100;
+    totalWeight += weight;
+    totalScore += weight * percent;
+  });
+
+  return totalWeight > 0 ? Math.round((totalScore / totalWeight) * 100) : 0;
+};
+
+const buildDashboardTrendSnapshot = (data: any): DashboardTrendSnapshot => {
+  const digitalMetrics = Array.isArray(data?.digitalMetrics) ? data.digitalMetrics : [];
+  const stabilityMetrics = Array.isArray(data?.stabilityMetrics) ? data.stabilityMetrics : [];
+  const productionMetrics = Array.isArray(data?.productionMetrics) ? data.productionMetrics : [];
+  const totalsConfig = data?.totalsConfig || {};
+  const weights = totalsConfig.weights || {};
+  const overrides = totalsConfig.overrides || {};
+  const vocNib = toTrendNumber(data?.vocData?.nib);
+  const enpsValue = toTrendNumber(data?.enpsData?.value);
+
+  const scoreCardCalc = calculateTrendSectionScore(digitalMetrics);
+  const stabilityCalc = calculateTrendSectionScore(stabilityMetrics);
+  const productionCalc = calculateTrendSectionScore(productionMetrics);
+  const vocCalc = evaluateVocScore(vocNib);
+
+  return {
+    savedAt: new Date().toISOString(),
+    totals: {
+      scoreCard: toTrendNumber(overrides.scoreCard || scoreCardCalc),
+      stability: toTrendNumber(overrides.stability || stabilityCalc),
+      production: toTrendNumber(overrides.production || productionCalc),
+      voc: toTrendNumber(overrides.voc || vocCalc),
+      personnel: toTrendNumber(overrides.personnel || enpsValue),
+    },
+    scoreCardMetrics: digitalMetrics
+      .slice()
+      .sort((a: any, b: any) => toTrendNumber(a?.id) - toTrendNumber(b?.id))
+      .slice(0, 4)
+      .map((metric: any, index: number) => {
+        const id = toTrendNumber(metric?.id, index + 1);
+        const runrateRaw = String(metric?.runrate ?? '').replace('%', '').replace(',', '.').trim();
+        const runrate = parseFloat(runrateRaw);
+        const value =
+          id === 2 || id === 3
+            ? Math.round(Number.isFinite(runrate) ? runrate : calculateTrendMetricPercent(metric))
+            : Math.round(calculateTrendMetricPercent(metric));
+
+        return { id, value };
+      }),
+  };
+};
+
+const normalizeDashboardTrendHistory = (raw: any): DashboardTrendSnapshot[] => {
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((item) => {
+      const totals = item?.totals || {};
+      const scoreCardMetrics = Array.isArray(item?.scoreCardMetrics) ? item.scoreCardMetrics : [];
+      return {
+        savedAt: typeof item?.savedAt === 'string' && item.savedAt.trim() ? item.savedAt : new Date().toISOString(),
+        totals: {
+          scoreCard: toTrendNumber(totals.scoreCard),
+          stability: toTrendNumber(totals.stability),
+          production: toTrendNumber(totals.production),
+          voc: toTrendNumber(totals.voc),
+          personnel: toTrendNumber(totals.personnel),
+        },
+        scoreCardMetrics: scoreCardMetrics
+          .map((metric: any, index: number) => ({
+            id: toTrendNumber(metric?.id, index + 1),
+            value: toTrendNumber(metric?.value),
+          }))
+          .filter((metric: { id: number; value: number }) => metric.id > 0),
+      };
+    })
+    .sort((a, b) => new Date(a.savedAt).getTime() - new Date(b.savedAt).getTime());
+};
+
 const VOC_TEMPLATE_PREVIEW = {
   title: 'Название',
   nib: 0,
@@ -212,8 +352,9 @@ export function RedCapPage({
     const nib = Number.isFinite(Number(raw?.nib)) ? Number(raw.nib) : 0;
     const range = typeof raw?.range === 'string' ? raw.range : '0-0';
     const plan = Number.isFinite(Number(raw?.plan)) ? Number(raw.plan) : 85;
+    const hasExplicitItemsArray = Array.isArray(raw?.items);
 
-    const normalizedItems = Array.isArray(raw?.items)
+    const normalizedItems = hasExplicitItemsArray
       ? raw.items.slice(0, 5).map((item: any, index: number) => ({
           id: String(item?.id || `voc-item-${index + 1}`),
           label: typeof item?.label === 'string' && item.label.trim() ? item.label : `Строка ${index + 1}`,
@@ -222,13 +363,13 @@ export function RedCapPage({
         }))
       : null;
 
-    if (normalizedItems && normalizedItems.length > 0) {
+    if (hasExplicitItemsArray) {
       return {
         nib,
         nibColor: raw?.nibColor === 'yellow' || raw?.nibColor === 'red' ? raw.nibColor : 'green',
         range,
         plan,
-        items: normalizedItems,
+        items: normalizedItems || [],
       };
     }
 
@@ -309,6 +450,7 @@ export function RedCapPage({
         weights: { scoreCard: 30, stability: 20, production: 20, voc: 20, personnel: 10 },
         overrides: { scoreCard: '', stability: '', production: '', voc: '', personnel: '100', total: '' }
       },
+      trendHistory: [],
       widgetTitles: getDefaultWidgetTitles(),
       hiddenWidgets: {},
       deletedWidgets: {},
@@ -353,6 +495,7 @@ export function RedCapPage({
           enpsData: sourceData.enpsData,
           visibilityData: sourceData.visibilityData,
           totalsConfig: sourceData.totalsConfig || getDefaultData().totalsConfig,
+          trendHistory: normalizeDashboardTrendHistory(sourceData.trendHistory),
           widgetTitles: { ...getDefaultWidgetTitles(), ...(sourceData.widgetTitles || {}) },
           hiddenWidgets: sourceData.hiddenWidgets || {},
           deletedWidgets: sourceData.deletedWidgets || {},
@@ -403,6 +546,7 @@ export function RedCapPage({
         enpsData: latestRaw.enpsData,
         visibilityData: latestRaw.visibilityData,
         totalsConfig: latestRaw.totalsConfig || getDefaultData().totalsConfig,
+        trendHistory: normalizeDashboardTrendHistory(latestRaw.trendHistory),
         widgetTitles: { ...getDefaultWidgetTitles(), ...(latestRaw.widgetTitles || {}) },
         hiddenWidgets: latestRaw.hiddenWidgets || {},
         deletedWidgets: latestRaw.deletedWidgets || {},
@@ -419,6 +563,19 @@ export function RedCapPage({
       };
       const basePayload = initialDataRef.current || localPayload;
       const payload = mergeChangedFields(basePayload, localPayload, latestPayload);
+      const currentSnapshot = buildDashboardTrendSnapshot(payload);
+      const existingTrendHistory = normalizeDashboardTrendHistory(payload.trendHistory);
+      const lastSnapshot = existingTrendHistory[existingTrendHistory.length - 1];
+      const sameAsLatestSnapshot =
+        lastSnapshot &&
+        JSON.stringify(lastSnapshot.totals) === JSON.stringify(currentSnapshot.totals) &&
+        JSON.stringify(lastSnapshot.scoreCardMetrics) === JSON.stringify(currentSnapshot.scoreCardMetrics);
+
+      const nextTrendHistory = sameAsLatestSnapshot
+        ? existingTrendHistory
+        : [...existingTrendHistory, currentSnapshot].slice(-26);
+
+      payload.trendHistory = nextTrendHistory;
 
       await saveDataProp(currentQuarter, payload);
 
@@ -459,13 +616,14 @@ export function RedCapPage({
   const scoreCardCalc = calculateScore(digitalMetrics);
   const stabilityCalc = calculateScore(stabilityMetrics);
   const productionCalc = calculateScore(productionMetrics);
-  const vocCalc = vocData.nib >= 4.75 ? '100' : '0';
+  const vocCalc = String(evaluateVocScore(vocData.nib));
+  const enpsCalc = String(toTrendNumber(enpsData?.value));
 
   const scoreCardValue = totalsConfig.overrides.scoreCard || scoreCardCalc;
   const stabilityValue = totalsConfig.overrides.stability || stabilityCalc;
   const productionValue = totalsConfig.overrides.production || productionCalc;
-  const vocValue = totalsConfig.overrides.voc || vocCalc;
-  const personnelValue = totalsConfig.overrides.personnel || '100';
+  const vocValue = vocCalc;
+  const personnelValue = enpsCalc;
 
   const calculatedTotal = Math.round(
     (parseInt(scoreCardValue || '0') * (totalsConfig.weights.scoreCard / 100)) +
@@ -788,10 +946,6 @@ export function RedCapPage({
                 {metrics.map((metric) => {
                   const percentValue = calculateMetricPercent(metric);
                   const percentColor = percentValue >= 100 ? 'text-green-400' : percentValue >= 80 ? 'text-yellow-400' : 'text-red-400';
-                  const relatedMmbRunrate = metric.id === 2
-                    ? metrics.find((candidate) => candidate.id === 3)?.runrate
-                    : null;
-                  
                   return (
                     <tr key={metric.id} className="border-b border-gray-800/30 last:border-0">
                       <td className="py-4 text-white align-top">{metric.id}</td>
@@ -808,26 +962,6 @@ export function RedCapPage({
                             {metric.name}{' '}
                             {metric.hasAlert && <span className="text-red-400 text-xs ml-2">!!!</span>}
                           </span>
-                        )}
-                        {(metric.runrate || metric.id === 2) && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            {isEditing ? (
-                              <input
-                                type="text"
-                                value={metric.runrate || ''}
-                                onChange={(e) => handleEditMetric(setter, metric.id, 'runrate', e.target.value)}
-                                className="w-32 bg-[#0a0a0a]/50 border border-gray-700/30 rounded px-2 py-1 text-gray-400"
-                                placeholder="Runrate"
-                              />
-                            ) : (
-                              `Runrate: ${metric.runrate}`
-                            )}
-                          </div>
-                        )}
-                        {!isEditing && metric.id === 2 && relatedMmbRunrate && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            Объем вторичных цифровых продаж продуктов ММБ (runrate {relatedMmbRunrate})
-                          </div>
                         )}
                       </td>
                       <td className="py-4 align-top">
@@ -913,6 +1047,23 @@ export function RedCapPage({
                             />
                           )}
                         </div>
+                        {widgetKey === 'scoreCard' && (metric.runrate || metric.id === 2) && (
+                          <div className="mt-2">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={metric.runrate || ''}
+                                onChange={(e) => handleEditMetric(setter, metric.id, 'runrate', e.target.value)}
+                                className="w-32 bg-cyan-500/10 border border-cyan-400/30 rounded px-2 py-1 text-cyan-200 text-xs"
+                                placeholder="Runrate"
+                              />
+                            ) : (
+                              <span className="inline-flex items-center whitespace-nowrap rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 text-xs font-semibold text-cyan-200 shadow-[0_0_12px_rgba(34,211,238,0.12)]">
+                                Runrate: {metric.runrate || '—'}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       {isEditing && (
                         <td className="py-4 align-top">
@@ -947,10 +1098,6 @@ export function RedCapPage({
             {metrics.map((metric) => {
               const percentValue = calculateMetricPercent(metric);
               const percentColor = percentValue >= 100 ? 'text-green-400' : percentValue >= 80 ? 'text-yellow-400' : 'text-red-400';
-              const relatedMmbRunrate = metric.id === 2
-                ? metrics.find((candidate) => candidate.id === 3)?.runrate
-                : null;
-              
               return (
                 <div key={metric.id} className="border-b border-gray-800/30 last:border-0 pb-4 last:pb-0">
                   <div className="flex items-start justify-between mb-2">
@@ -967,16 +1114,6 @@ export function RedCapPage({
                           {metric.name}{' '}
                           {metric.hasAlert && <span className="text-red-400 text-xs ml-2">!!!</span>}
                         </span>
-                      )}
-                      {(metric.runrate || metric.id === 2) && !isEditing && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          Runrate: {metric.runrate || '—'}
-                        </div>
-                      )}
-                      {!isEditing && metric.id === 2 && relatedMmbRunrate && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          Объем вторичных цифровых продаж продуктов ММБ (runrate {relatedMmbRunrate})
-                        </div>
                       )}
                     </div>
                     {isEditing && (
@@ -1045,6 +1182,23 @@ export function RedCapPage({
                             title="Цвет процента"
                           />
                         </div>
+                        {widgetKey === 'scoreCard' && (metric.runrate || metric.id === 2) && (
+                          <div className="mt-2">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={metric.runrate || ''}
+                                onChange={(e) => handleEditMetric(setter, metric.id, 'runrate', e.target.value)}
+                                className="w-full bg-cyan-500/10 border border-cyan-400/30 rounded px-2 py-1 text-cyan-200 text-xs"
+                                placeholder="Runrate"
+                              />
+                            ) : (
+                              <span className="inline-flex items-center whitespace-nowrap rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 text-xs font-semibold text-cyan-200 shadow-[0_0_12px_rgba(34,211,238,0.12)]">
+                                Runrate: {metric.runrate || '—'}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <span className="text-gray-500 text-xs">Тип</span>
@@ -1070,7 +1224,7 @@ export function RedCapPage({
                           placeholder="∞"
                         />
                       </div>
-                      {(metric.runrate || metric.id === 2) && (
+                      {widgetKey === 'scoreCard' && (metric.runrate || metric.id === 2) && (
                         <div className="col-span-2">
                           <span className="text-gray-500 text-xs">Runrate</span>
                           <input
@@ -1379,14 +1533,26 @@ export function RedCapPage({
                     <div className="space-y-2">
                       <input 
                         type="text" 
-                        value={item.id === 'total' ? totalsConfig.overrides.total : totalsConfig.overrides[item.id as keyof typeof totalsConfig.overrides]} 
-                        onChange={(e) => setTotalsConfig({...totalsConfig, overrides: {...totalsConfig.overrides, [item.id]: e.target.value}})} 
+                        value={
+                          item.id === 'total'
+                            ? totalsConfig.overrides.total
+                            : item.id === 'voc'
+                              ? vocCalc
+                              : item.id === 'personnel'
+                                ? enpsCalc
+                              : totalsConfig.overrides[item.id as keyof typeof totalsConfig.overrides]
+                        } 
+                        onChange={(e) => {
+                          if (item.id === 'voc' || item.id === 'personnel') return;
+                          setTotalsConfig({...totalsConfig, overrides: {...totalsConfig.overrides, [item.id]: e.target.value}});
+                        }} 
+                        readOnly={item.id === 'voc' || item.id === 'personnel'}
                         className={`w-full bg-[#0a0a0a]/80 border border-gray-700/50 rounded px-2 py-1 text-white ${item.isTotal ? 'text-2xl' : 'text-lg'} font-bold`} 
                         placeholder={item.id === 'total' ? calculatedTotal.toString() : 
                           item.id === 'scoreCard' ? scoreCardCalc : 
                           item.id === 'stability' ? stabilityCalc : 
                           item.id === 'production' ? productionCalc : 
-                          item.id === 'voc' ? vocCalc : '100'}
+                          item.id === 'voc' ? vocCalc : item.id === 'personnel' ? enpsCalc : '100'}
                       />
                       {!item.isTotal && (
                         <div className="flex items-center text-xs text-gray-500">
