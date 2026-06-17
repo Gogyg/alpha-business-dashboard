@@ -1,7 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
 import { BarChart3, Target, ChevronLeft, ChevronRight, Edit3, X, Goal, Download, LogOut, CalendarDays, Settings, EyeOff, Eye, Save, TrendingUp, GripVertical, Plus, FileText, Trash2, LayoutDashboard } from 'lucide-react';
 import { useEffect, useMemo, useState, type DragEvent } from 'react';
-import logoImage from '../../assets/5b6ead3363f3911c8fbce32735c6a3c819462945.png';
 import * as XLSX from 'xlsx';
 import { authAPI, getCurrentUser, goalsAPI, menuAPI } from '../utils/api';
 import { PasswordModal } from './PasswordModal';
@@ -489,8 +488,8 @@ export function Layout() {
         {/* Logo */}
         <div className="p-4 md:p-6 border-b border-white/5 flex justify-between items-center md:block">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-gradient-to-br from-[#60a5fa] via-[#3b82f6] to-[#2563eb] p-0.5">
-              <img src={logoImage} alt="Альфа-Бизнес" className="w-full h-full rounded-[10px]" />
+            <div className="w-8 h-8 md:w-10 md:h-10 overflow-hidden rounded-xl">
+              <img src="/app-icon.png" alt="Дашборд дирекции" className="w-full h-full object-cover" />
             </div>
             <span className="text-white font-semibold hidden sm:inline">Альфа-Бизнес</span>
           </div>

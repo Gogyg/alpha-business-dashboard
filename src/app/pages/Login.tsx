@@ -2,8 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { authAPI } from '../utils/api';
 import { Lock, Mail, User, AlertCircle, CheckCircle } from 'lucide-react';
-import logoImage from '../../assets/5b6ead3363f3911c8fbce32735c6a3c819462945.png';
-
 export default function Login() {
   const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
@@ -56,13 +54,11 @@ export default function Login() {
       <div className="w-full max-w-md relative z-10">
         {/* Logo/Title */}
         <div className="text-center mb-10">
-          <div className="inline-block p-1 bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl mb-6 shadow-2xl shadow-blue-500/20">
-            <div className="bg-[#0a0f1e] p-2 rounded-[22px] backdrop-blur-2xl">
-              <img src={logoImage} alt="Alpha" className="w-16 h-16 rounded-[18px]" />
-            </div>
+          <div className="inline-block mb-6">
+            <img src="/app-icon.png" alt="Дашборд дирекции" className="w-20 h-20 rounded-[24px] object-cover" />
           </div>
           <h1 className="text-4xl font-black text-white mb-3 tracking-tight">
-            Альфа-Бизнес <span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">Дашборд</span>
+            Дашборд <span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">дирекции</span>
           </h1>
           <p className="text-gray-400 text-lg font-medium">
             {isForgot ? 'Восстановление доступа' : isLogin ? 'Добро пожаловать' : 'Создать аккаунт'}
