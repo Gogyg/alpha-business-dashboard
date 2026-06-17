@@ -35,9 +35,12 @@ Responsibilities:
 
 UI behavior notes:
 - radar labels use adaptive multiline layout for narrow widths to avoid clipping/overlap
+- the Red Cap radar center caption is `Текущий результат`
+- the KPI radar center caption is `Прогноз` for the current/future quarter and `Показатель` for a past quarter view
 - `MAU Spotlight` in KPI radar uses Red Cap `runrate`, capped at `120%`
 - `Продажи ММБ` in KPI radar uses Red Cap `runrate`, capped at `150%`
 - focus bullets use the gold accent style agreed for the living dashboard
+- focus widget edits are persisted into the shared quarter dashboard payload, not browser-only state
 - nearest-event countdown is shown in working days and switches to `сегодня` for same-day events
 
 ### MBO

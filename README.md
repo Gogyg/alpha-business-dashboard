@@ -20,7 +20,6 @@
 - Material UI компоненты
 - Supabase (Auth + Database + Real-time, self-hosted)
 - VPS (Production hosting)
-- Vercel (Reserve hosting)
 
 ## Установка для разработки
 
@@ -49,20 +48,22 @@ npm run build
 1. Поднимите Supabase на VPS (например, http://your-vps:8000)
 2. Укажите `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY` в окружении
 
-### Шаг 2: Vercel (резервный)
+### Шаг 2: Прод-выкатка приложения на VPS
 
-1. Перейдите на [vercel.com](https://vercel.com)
-2. Войдите через GitHub
-3. Нажмите "Add New Project"
-4. Импортируйте этот репозиторий
-5. Добавьте Environment Variables:
-   - `VITE_SUPABASE_URL` = URL вашего self-hosted Supabase
-   - `VITE_SUPABASE_ANON_KEY` = ваш Anon Key
-6. Нажмите "Deploy"
+1. Смёржьте изменения в `main` через GitHub
+2. Подключитесь к прод-серверу
+3. Выполните:
+
+```bash
+cd /var/www/alpha-dashboard
+git pull origin main
+npm install
+npm run build
+```
 
 ### Шаг 3: Автоматические обновления
 
-После настройки каждый push в main автоматически обновляет приложение.
+После merge в `main` приложение обновляется штатным GitHub + VPS процессом.
 
 ```bash
 git add .

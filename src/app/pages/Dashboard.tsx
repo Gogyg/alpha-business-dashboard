@@ -95,6 +95,12 @@ interface DashboardTrendSnapshot {
 }
 
 const toTrendNumber = (value: unknown, fallback = 0) => {
+  if (typeof value === 'string') {
+    const normalized = value.replace('%', '').replace(/\s+/g, '').replace(',', '.').trim();
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
 };
@@ -171,8 +177,8 @@ const buildDashboardTrendSnapshot = (data: any): DashboardTrendSnapshot => {
       scoreCard: toTrendNumber(overrides.scoreCard || scoreCardCalc),
       stability: toTrendNumber(overrides.stability || stabilityCalc),
       production: toTrendNumber(overrides.production || productionCalc),
-      voc: toTrendNumber(overrides.voc || vocCalc),
-      personnel: toTrendNumber(overrides.personnel || enpsValue),
+      voc: vocCalc,
+      personnel: enpsValue,
     },
     scoreCardMetrics: digitalMetrics
       .slice()
@@ -338,10 +344,11 @@ export function RedCapPage({
     ]);
 
     for (const key of keys) {
+      const localHasKey = Object.prototype.hasOwnProperty.call(localData || {}, key);
       const localValue = localData?.[key];
       const baseValue = baseData?.[key];
       const latestValue = latestData?.[key];
-      const wasChangedLocally = !isSameData(localValue, baseValue);
+      const wasChangedLocally = localHasKey ? !isSameData(localValue, baseValue) : false;
       merged[key] = wasChangedLocally ? localValue : latestValue;
     }
 

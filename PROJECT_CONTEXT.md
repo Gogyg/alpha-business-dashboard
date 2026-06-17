@@ -9,7 +9,6 @@
   1. Merge to `main` on GitHub
   2. On VPS: `git pull && npm install && npm run build`
 - VPS access: `ssh root@2.26.106.1`
-- Vercel: backup channel, not primary production
 - DB: Supabase on VPS, shared data for all users
 
 ## 2) Team Rules (Critical)

@@ -48,6 +48,12 @@ const parsePercentFromAny = (value: unknown, fallback = 0) => {
   return Number.isFinite(numeric) ? numeric : fallback;
 };
 
+const getQuarterIndex = (quarter: string) => {
+  const match = /^Q([1-4])$/i.exec(String(quarter).trim());
+  if (!match) return null;
+  return Number(match[1]) - 1;
+};
+
 const EVENT_COLORS: EventColor[] = ["green", "emerald", "blue", "violet", "red", "amber"];
 
 const isEventColor = (value: unknown): value is EventColor =>
@@ -148,6 +154,12 @@ const normalizeCalendarKey = (value: unknown): CalendarKey => {
 };
 
 const toNumber = (value: unknown, fallback = 0) => {
+  if (typeof value === "string") {
+    const normalized = value.replace("%", "").replace(/\s+/g, "").replace(",", ".").trim();
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
 };
@@ -265,13 +277,14 @@ const buildTotalsMetrics = (data: any) => {
   const overrides = data?.totalsConfig?.overrides || {};
   const widgetTitles = data?.widgetTitles || {};
   const vocNib = toNumber(data?.vocData?.nib);
+  const enpsValue = toNumber(data?.enpsData?.value);
 
   const kpiAverageScore = calculateSectionScore(digitalMetrics);
   const scoreCardValue = kpiAverageScore;
   const stabilityValue = toNumber(overrides.stability || calculateSectionScore(stabilityMetrics));
   const productionValue = toNumber(overrides.production || calculateSectionScore(productionMetrics));
-  const vocValue = toNumber(overrides.voc || evaluateVocScore(vocNib));
-  const personnelValue = toNumber(overrides.personnel || 100);
+  const vocValue = evaluateVocScore(vocNib);
+  const personnelValue = enpsValue;
 
   return [
     { id: "scoreCard", name: normalizeName(widgetTitles.scoreCard || "Скор-карта", "Скор-карта"), value: scoreCardValue, weight: toNumber(weights.scoreCard) },
@@ -396,7 +409,7 @@ function RadarAxisTick(props: any) {
       ? Math.max(safePadding, Math.min(chartWidth - safePadding, rawX))
       : rawX;
   const valueFontSize = Math.max(isNarrowChart ? 12 : 14, Math.round((isNarrowChart ? 16 : 19) * labelScale));
-  const titleFontSize = Math.max(8, Math.round((isNarrowChart ? 8.5 : 10) * labelScale));
+  const titleFontSize = Math.max(10, Math.round((isNarrowChart ? 10.2 : 12) * labelScale));
   const metaFontSize = Math.max(isNarrowChart ? 8 : 9, Math.round((isNarrowChart ? 8.5 : 10) * labelScale));
   const lineGap1 = Math.max(9, Math.round((isNarrowChart ? 11 : 14) * labelScale));
   const lineGap2 = Math.max(8, Math.round((isNarrowChart ? 10 : 12) * labelScale));
@@ -584,6 +597,15 @@ function ScoreWidget({
 export function LivingDashboard() {
   const { currentQuarter, currentYear, isEditingMode } = useOutletContext<OutletContext>();
   const today = useMemo(() => startOfDay(new Date()), []);
+  const currentQuarterIndex = useMemo(() => getQuarterIndex(currentQuarter), [currentQuarter]);
+  const actualQuarterIndex = useMemo(() => Math.floor(today.getMonth() / 3), [today]);
+  const isPastQuarterView = useMemo(() => {
+    if (currentQuarterIndex === null) return false;
+    const actualYear = today.getFullYear();
+    if (currentYear < actualYear) return true;
+    if (currentYear > actualYear) return false;
+    return currentQuarterIndex < actualQuarterIndex;
+  }, [actualQuarterIndex, currentQuarterIndex, currentYear, today]);
 
   const [redcapMetrics, setRedcapMetrics] = useState<MetricPoint[]>([
     { name: "Скор-карта", value: 0, weight: 30 },
@@ -1278,7 +1300,7 @@ export function LivingDashboard() {
           title="Красная шапочка"
           subtitle="Взвешенная эффективность"
           accent="#00d4ff"
-          scoreLabel="Общий результат"
+          scoreLabel="Текущий результат"
           metrics={redcapMetrics}
           quarter={currentQuarter}
           year={currentYear}
@@ -1294,7 +1316,7 @@ export function LivingDashboard() {
           title="KPI"
           subtitle="Скор-карта"
           accent="#7c00ff"
-          scoreLabel="Средний показатель"
+          scoreLabel={isPastQuarterView ? "Показатель" : "Прогноз"}
           metrics={kpiMetrics}
           quarter={currentQuarter}
           year={currentYear}
