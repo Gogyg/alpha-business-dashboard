@@ -40,6 +40,7 @@ Route: `/living-dashboard`
 ### Persistence coupling
 - living dashboard itself is mostly derived/read-only from the shared quarter dashboard payload
 - `focusConfig` is saved through the dashboard payload and must remain cross-session shared
+- quarter payload merges must preserve fields not edited by the current screen, otherwise shared living-dashboard settings can be lost
 - nearest event is not duplicated locally; it is always derived from the shared `events` source
 
 ## MBO Architecture

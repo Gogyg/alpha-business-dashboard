@@ -26,12 +26,14 @@ Key JSON fields:
 - `enpsData`
 - `totalsConfig`
 - `trendHistory[]`
+- `livingDashboardFocus`
 
 Behavior notes:
 - `trendHistory` is appended on save when the current snapshot differs from the latest stored snapshot
 - history is kept per current quarter payload and trimmed to the latest 26 snapshots
 - living dashboard uses the previous snapshot in `trendHistory` as the baseline for weekly trend deltas
 - runrate values for score-card metrics are persisted in the dashboard payload and then reused by living dashboard KPI calculations
+- `livingDashboardFocus` is stored in the same quarter payload and must survive saves coming from other dashboard widgets/pages
 
 ## MBO Persistence Model
 

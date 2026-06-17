@@ -52,6 +52,8 @@ Fields / derived blocks:
 
 Business rules:
 - page is quarter-aware for data loading, but trend comparison is weekly inside the same quarter
+- Red Cap center caption is shown as `Текущий результат`
+- KPI center caption is shown as `Прогноз` for the current/future quarter and `Показатель` for past-quarter review
 - KPI `MAU Spotlight` uses Red Cap `runrate` with a hard cap of `120%`
 - KPI `Продажи ММБ` uses Red Cap `runrate` with a hard cap of `150%`
 - VOC score is normalized as:
@@ -59,6 +61,7 @@ Business rules:
   - `4.75..4.78` inclusive => `100%`
   - `> 4.78` => `110%`
 - personnel/people summary value is sourced from `eNPS`
+- `focusConfig` is a shared persisted block inside the quarter dashboard payload and must remain visible across users/sessions
 
 ### MBO Page
 Represents a shared executive MBO screen available at `/mbo`.
