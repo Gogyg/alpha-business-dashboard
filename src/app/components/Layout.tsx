@@ -803,9 +803,23 @@ export function Layout() {
                           Отменить
                         </button>
                         <button
-                          onClick={() => {
-                            window.dispatchEvent(new CustomEvent('living-dashboard-save'));
-                            setIsEditingMode(false);
+                          onClick={async () => {
+                            try {
+                              await new Promise<void>((resolve, reject) => {
+                                window.dispatchEvent(
+                                  new CustomEvent('living-dashboard-save', {
+                                    detail: {
+                                      resolve,
+                                      reject,
+                                    },
+                                  }),
+                                );
+                              });
+                              setIsEditingMode(false);
+                            } catch (error) {
+                              const message = error instanceof Error ? error.message : 'Не удалось сохранить изменения';
+                              alert(message);
+                            }
                           }}
                           className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 border border-emerald-500/50 text-white h-full flex-1 rounded-xl flex items-center gap-2.5 transition-all shadow-xl shadow-emerald-500/20 justify-center text-sm font-bold backdrop-blur-xl"
                         >

@@ -117,6 +117,8 @@ const parseTrendMaxPercent = (value: string | undefined) => {
   return Number.isFinite(numeric) ? numeric : Infinity;
 };
 
+const clampTrendPercent = (value: number, max: number) => Math.min(Math.max(value, 0), max);
+
 const calculateTrendMetricPercent = (metric: any) => {
   const fact = toTrendNumber(metric?.fact);
   const plan = toTrendNumber(metric?.plan);
@@ -188,9 +190,17 @@ const buildDashboardTrendSnapshot = (data: any): DashboardTrendSnapshot => {
         const id = toTrendNumber(metric?.id, index + 1);
         const runrateRaw = String(metric?.runrate ?? '').replace('%', '').replace(',', '.').trim();
         const runrate = parseFloat(runrateRaw);
+        const normalizedRunrate =
+          id === 2
+            ? clampTrendPercent(Number.isFinite(runrate) ? runrate : calculateTrendMetricPercent(metric), 120)
+            : id === 3
+              ? clampTrendPercent(Number.isFinite(runrate) ? runrate : calculateTrendMetricPercent(metric), 150)
+              : Number.isFinite(runrate)
+                ? runrate
+                : calculateTrendMetricPercent(metric);
         const value =
           id === 2 || id === 3
-            ? Math.round(Number.isFinite(runrate) ? runrate : calculateTrendMetricPercent(metric))
+            ? Math.round(normalizedRunrate)
             : Math.round(calculateTrendMetricPercent(metric));
 
         return { id, value };
@@ -217,7 +227,13 @@ const normalizeDashboardTrendHistory = (raw: any): DashboardTrendSnapshot[] => {
         scoreCardMetrics: scoreCardMetrics
           .map((metric: any, index: number) => ({
             id: toTrendNumber(metric?.id, index + 1),
-            value: toTrendNumber(metric?.value),
+            value: (() => {
+              const id = toTrendNumber(metric?.id, index + 1);
+              const rawValue = toTrendNumber(metric?.value);
+              if (id === 2) return clampTrendPercent(rawValue, 120);
+              if (id === 3) return clampTrendPercent(rawValue, 150);
+              return rawValue;
+            })(),
           }))
           .filter((metric: { id: number; value: number }) => metric.id > 0),
       };
@@ -501,6 +517,7 @@ export function RedCapPage({
           vocData: normalizeVocData(sourceData.vocData),
           enpsData: sourceData.enpsData,
           visibilityData: sourceData.visibilityData,
+          livingDashboardFocus: sourceData.livingDashboardFocus,
           totalsConfig: sourceData.totalsConfig || getDefaultData().totalsConfig,
           trendHistory: normalizeDashboardTrendHistory(sourceData.trendHistory),
           widgetTitles: { ...getDefaultWidgetTitles(), ...(sourceData.widgetTitles || {}) },
@@ -537,6 +554,7 @@ export function RedCapPage({
         vocData,
         enpsData,
         visibilityData,
+        livingDashboardFocus: initialDataRef.current?.livingDashboardFocus,
         totalsConfig,
         widgetTitles,
         hiddenWidgets,
@@ -552,6 +570,7 @@ export function RedCapPage({
         vocData: normalizeVocData(latestRaw.vocData),
         enpsData: latestRaw.enpsData,
         visibilityData: latestRaw.visibilityData,
+        livingDashboardFocus: latestRaw.livingDashboardFocus,
         totalsConfig: latestRaw.totalsConfig || getDefaultData().totalsConfig,
         trendHistory: normalizeDashboardTrendHistory(latestRaw.trendHistory),
         widgetTitles: { ...getDefaultWidgetTitles(), ...(latestRaw.widgetTitles || {}) },

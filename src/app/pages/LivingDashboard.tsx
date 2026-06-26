@@ -197,10 +197,14 @@ const normalizeDashboardTrendHistory = (raw: any): DashboardTrendSnapshot[] => {
           personnel: toNumber(totals.personnel),
         },
         scoreCardMetrics: scoreCardMetrics
-          .map((metric: any, index: number) => ({
-            id: toNumber(metric?.id, index + 1),
-            value: toNumber(metric?.value),
-          }))
+          .map((metric: any, index: number) => {
+            const id = toNumber(metric?.id, index + 1);
+            const rawValue = toNumber(metric?.value);
+            return {
+              id,
+              value: id === 2 ? clampPercent(rawValue, 120) : id === 3 ? clampPercent(rawValue, 150) : rawValue,
+            };
+          })
           .filter((metric: { id: number; value: number }) => metric.id > 0),
       };
     })
@@ -325,6 +329,25 @@ const buildScoreCardMetrics = (data: any) => {
         weight: parseWeight(metric?.weight),
       };
     });
+};
+
+const DEFAULT_FOCUS_ITEMS = [
+  "Runrate цифровых продаж",
+  "Удержание ключевых клиентов",
+  "Сроки поставок компонентов",
+];
+
+const normalizeLivingFocusConfig = (raw: unknown): LivingFocusConfig => {
+  const source = raw && typeof raw === "object" ? (raw as Partial<LivingFocusConfig>) : {};
+  const mode = source.mode === "good" ? "good" : "attention";
+  const normalizedItems = Array.isArray(source.items)
+    ? source.items.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
+    : [];
+
+  return {
+    mode,
+    items: mode === "attention" ? (normalizedItems.length > 0 ? normalizedItems : DEFAULT_FOCUS_ITEMS) : [],
+  };
 };
 
 const getWeightedScore = (metrics: MetricPoint[]) => {
@@ -669,16 +692,14 @@ export function LivingDashboard() {
   const nearestEventStatusLabel = nearestFutureEvent ? STATUS_LABELS[nearestFutureEvent.status] : "Нет событий";
 
   const saveFocusConfig = async (nextConfig: LivingFocusConfig) => {
-    try {
-      const existing = (await dashboardAPI.get(currentQuarter)) || {};
-      await dashboardAPI.save(currentQuarter, {
-        ...existing,
-        livingDashboardFocus: nextConfig,
-      });
-      setInitialFocusConfig(nextConfig);
-    } catch (error) {
-      console.error("Failed to save living dashboard focus config:", error);
-    }
+    const normalizedConfig = normalizeLivingFocusConfig(nextConfig);
+    const existing = (await dashboardAPI.get(currentQuarter)) || {};
+    await dashboardAPI.save(currentQuarter, {
+      ...existing,
+      livingDashboardFocus: normalizedConfig,
+    });
+    setFocusConfig(normalizedConfig);
+    setInitialFocusConfig(normalizedConfig);
   };
 
   useEffect(() => {
@@ -733,26 +754,9 @@ export function LivingDashboard() {
         const currentVocRange = String(currentData?.vocData?.range || "").trim();
         setVocPlanRange(currentVocRange || "4,75-4,78");
 
-        const persistedFocus = currentData?.livingDashboardFocus;
-        if (persistedFocus && (persistedFocus.mode === "good" || persistedFocus.mode === "attention")) {
-          const persistedItems = Array.isArray(persistedFocus.items)
-            ? persistedFocus.items.filter((item: unknown) => typeof item === "string" && item.trim().length > 0)
-            : [];
-          setFocusConfig({
-            mode: persistedFocus.mode,
-            items:
-              persistedItems.length > 0
-                ? persistedItems
-                : ["Runrate цифровых продаж", "Удержание ключевых клиентов", "Сроки поставок компонентов"],
-          });
-          setInitialFocusConfig({
-            mode: persistedFocus.mode,
-            items:
-              persistedItems.length > 0
-                ? persistedItems
-                : ["Runrate цифровых продаж", "Удержание ключевых клиентов", "Сроки поставок компонентов"],
-          });
-        }
+        const normalizedFocus = normalizeLivingFocusConfig(currentData?.livingDashboardFocus);
+        setFocusConfig(normalizedFocus);
+        setInitialFocusConfig(normalizedFocus);
       } catch (error) {
         console.error("Failed to sync living dashboard metrics:", error);
       }
@@ -827,11 +831,18 @@ export function LivingDashboard() {
   }, [today]);
 
   useEffect(() => {
-    const handleSave = async () => {
-      await saveFocusConfig({
-        ...focusConfig,
-        items: focusConfig.items.map((line) => line.trim()).filter(Boolean),
-      });
+    const handleSave = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ resolve?: () => void; reject?: (error: Error) => void }>;
+      try {
+        await saveFocusConfig({
+          ...focusConfig,
+          items: focusConfig.items.map((line) => line.trim()).filter(Boolean),
+        });
+        customEvent.detail?.resolve?.();
+      } catch (error) {
+        console.error("Failed to save living dashboard focus config:", error);
+        customEvent.detail?.reject?.(error instanceof Error ? error : new Error("Не удалось сохранить фокус внимания"));
+      }
     };
     const handleCancel = () => {
       setFocusConfig(initialFocusConfig);
@@ -1346,8 +1357,8 @@ export function LivingDashboard() {
                     <>сегодня</>
                   ) : (
                     <>
-                      <span>через</span>
-                      {nearestEventCountdown.value}
+                      <span>через</span>{" "}
+                      {nearestEventCountdown.value}{" "}
                       <span>{nearestEventCountdown.suffix}</span>
                     </>
                   )
@@ -1416,7 +1427,7 @@ export function LivingDashboard() {
                             const sanitized = focusConfig.items.map((line) => line.trim()).filter(Boolean);
                             const next = {
                               ...focusConfig,
-                              items: sanitized.length > 0 ? sanitized : ["Новый пункт фокуса"],
+                              items: focusConfig.mode === "attention" ? (sanitized.length > 0 ? sanitized : ["Новый пункт фокуса"]) : [],
                             };
                             setFocusConfig(next);
                           }}
@@ -1425,7 +1436,9 @@ export function LivingDashboard() {
                           className="focus-remove-btn"
                           onClick={() => {
                             const nextItems = focusConfig.items.filter((_, currentIdx) => currentIdx !== idx);
-                            const normalized = nextItems.length > 0 ? nextItems : ["Новый пункт фокуса"];
+                            const normalized = focusConfig.mode === "attention"
+                              ? (nextItems.length > 0 ? nextItems : ["Новый пункт фокуса"])
+                              : [];
                             const next = { ...focusConfig, items: normalized };
                             setFocusConfig(next);
                           }}
