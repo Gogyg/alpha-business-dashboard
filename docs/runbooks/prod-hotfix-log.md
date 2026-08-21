@@ -85,3 +85,17 @@ This log is mandatory for any manual changes made directly on production infrast
 - Rollback note:
   - Run `/tmp/alpha-vless-release-d65a121/ops/vps/vless-443/rollback.sh /root/backups/vless-443-20260821-154816`.
   - Rollback restores nginx and the x-ui SQLite backup, removes SQLite WAL sidecars, verifies database integrity, and reruns the original HTTPS and public TCP `2087` VLESS baseline.
+
+### Reality SNI changed to `dl.google.com`
+- Exact production change:
+  - GitHub PRs `#10`, `#11`, and `#12`; release commit `ad75ac7e2719716048e589d9abb19bc06ad3ee6c`.
+  - nginx stream SNI, Reality destination, and Reality server name changed from `www.bing.com` to `dl.google.com`.
+  - UUID, Reality key pair, short ID, ports, and AmneziaWG configuration were not changed.
+  - Backup: `/root/backups/vless-443-20260821-sni-google`.
+- Validation:
+  - External macOS Xray client returned egress IP `2.26.106.1` and HTTP `200` from `https://example.com`.
+  - `alfanib.ru` returned HTTPS `200` with successful certificate verification.
+  - nginx and x-ui were active; TCP `443`, loopback `10443` and loopback `2087` listeners were present.
+  - Protected container identities and UDP `42692`/`51820` listeners were unchanged.
+- Rollback note:
+  - Run `/tmp/alpha-vless-release-ad75ac7/ops/vps/vless-443/rollback.sh /root/backups/vless-443-20260821-sni-google`.
