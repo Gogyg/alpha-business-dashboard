@@ -85,6 +85,8 @@ class OperationalScriptsTest(unittest.TestCase):
         self.assertIn("https://example.com", vless_smoke)
         self.assertIn("NamedTemporaryFile", vless_smoke)
         self.assertIn("unlink", vless_smoke)
+        self.assertIn("def run_curl", vless_smoke)
+        self.assertIn("attempts: int = 3", vless_smoke)
 
     def test_baseline_checks_current_site_and_vless_before_mutation(self):
         baseline = self.read_script("smoke_baseline.sh")
