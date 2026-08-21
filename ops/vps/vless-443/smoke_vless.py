@@ -87,6 +87,18 @@ def wait_for_socks(port: int, process: subprocess.Popen) -> None:
     raise RuntimeError("temporary Xray client did not open its SOCKS port")
 
 
+def run_curl(arguments, attempts: int = 3) -> subprocess.CompletedProcess:
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            return subprocess.run(arguments, capture_output=True, check=True)
+        except subprocess.CalledProcessError as error:
+            last_error = error
+            if attempt + 1 < attempts:
+                time.sleep(1)
+    raise last_error
+
+
 def main() -> int:
     args = parse_args()
     values = load_client_values(args.server_config, args.internal_port)
@@ -151,7 +163,7 @@ def main() -> int:
         )
         wait_for_socks(socks_port, process)
         proxy = f"127.0.0.1:{socks_port}"
-        public_ip = subprocess.run(
+        public_ip = run_curl(
             [
                 "curl",
                 "--socks5-hostname",
@@ -163,13 +175,10 @@ def main() -> int:
                 "15",
                 "https://api.ipify.org",
             ],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
+        ).stdout.decode().strip()
         if public_ip != args.expected_ip:
             raise RuntimeError(f"unexpected VPN egress IP: {public_ip}")
-        subprocess.run(
+        run_curl(
             [
                 "curl",
                 "--socks5-hostname",
@@ -182,8 +191,6 @@ def main() -> int:
                 "15",
                 "https://example.com",
             ],
-            stdout=subprocess.DEVNULL,
-            check=True,
         )
     finally:
         if process is not None:
