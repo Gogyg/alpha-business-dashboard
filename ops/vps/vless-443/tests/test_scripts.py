@@ -21,6 +21,8 @@ class OperationalScriptsTest(unittest.TestCase):
         self.assertIn("sqlite3", deploy)
         self.assertIn("/etc/x-ui/x-ui.db", deploy)
         self.assertIn("configure_xui.py", deploy)
+        self.assertIn("--reality-server-name", deploy)
+        self.assertIn('"dl.google.com"', deploy)
         self.assertIn("nginx -t", deploy)
         self.assertIn("systemctl restart x-ui", deploy)
         self.assertIn("waiting for Xray listener on 127.0.0.1:2087", deploy)

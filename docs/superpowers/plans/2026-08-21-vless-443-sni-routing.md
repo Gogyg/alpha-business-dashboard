@@ -4,7 +4,7 @@
 
 **Goal:** Share the VPS public TCP port `443` between `alfanib.ru` HTTPS and VLESS Reality while leaving AmneziaWG unchanged.
 
-**Architecture:** nginx stream inspects the TLS SNI and proxies `www.bing.com` to loopback Xray while sending every other connection to an internal nginx HTTPS listener. PROXY protocol preserves client addresses across both loopback hops.
+**Architecture:** nginx stream inspects the TLS SNI and proxies `dl.google.com` to loopback Xray while sending every other connection to an internal nginx HTTPS listener. PROXY protocol preserves client addresses across both loopback hops.
 
 **Tech Stack:** nginx 1.18 stream/ssl_preread, 3x-ui 3.6.0, Xray 26.7.28, Python 3 sqlite3, Bash, systemd.
 

@@ -29,7 +29,7 @@ command. Keep that terminal open through client verification.
 ## Client settings
 
 Keep the existing UUID, Reality public key, short ID, flow, and fingerprint.
-Change only the external port to `443`; keep SNI `www.bing.com`. The internal
+Change only the external port to `443`; keep SNI `dl.google.com`. The internal
 x-ui inbound remains on `2087` and must not be exposed in the router profile.
 
 ## Verification

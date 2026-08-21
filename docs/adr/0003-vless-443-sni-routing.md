@@ -14,7 +14,7 @@ an independent working service and must not be changed.
 ## Decision
 
 Use nginx stream with `ssl_preread` as the only public TCP `443` listener.
-Route Reality SNI `www.bing.com` to loopback Xray and route all other SNI values
+Route Reality SNI `dl.google.com` to loopback Xray and route all other SNI values
 to the loopback nginx HTTPS virtual host. Send PROXY protocol to both backends
 to preserve client addresses. Bind Xray to loopback after the cutover.
 

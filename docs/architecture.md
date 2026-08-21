@@ -115,7 +115,7 @@ The VPS shares public TCP `443` between the dashboard HTTPS endpoint and a
 VLESS Reality inbound. nginx stream performs TLS SNI inspection without
 terminating the public connection:
 
-- `www.bing.com` routes to Xray on `127.0.0.1:2087`.
+- `dl.google.com` routes to Xray on `127.0.0.1:2087`.
 - every other SNI, including `alfanib.ru` and `www.alfanib.ru`, routes to the
   nginx HTTPS virtual host on `127.0.0.1:10443`.
 

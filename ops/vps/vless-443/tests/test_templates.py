@@ -12,7 +12,8 @@ class NginxTemplateTest(unittest.TestCase):
         self.assertTrue(STREAM_TEMPLATE.is_file(), "stream template is missing")
         stream = STREAM_TEMPLATE.read_text()
 
-        self.assertIn("www.bing.com xray_reality;", stream)
+        self.assertIn("dl.google.com xray_reality;", stream)
+        self.assertNotIn("www.bing.com", stream)
         self.assertIn("default alfanib_https;", stream)
         self.assertIn("server 127.0.0.1:2087;", stream)
         self.assertIn("server 127.0.0.1:10443;", stream)

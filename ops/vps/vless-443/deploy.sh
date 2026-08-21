@@ -8,6 +8,7 @@ readonly STREAM_DIR="/etc/nginx/stream-conf.d"
 readonly STREAM_CONF="$STREAM_DIR/443-sni-router.conf"
 readonly XUI_DB="/etc/x-ui/x-ui.db"
 readonly INBOUND_PORT="2087"
+readonly REALITY_SERVER_NAME="dl.google.com"
 readonly BACKUP_DIR="/root/backups/vless-443-$(date +%Y%m%d-%H%M%S)"
 MUTATION_STARTED=0
 
@@ -96,7 +97,8 @@ nginx -t
 systemctl stop x-ui
 python3 "$SCRIPT_DIR/configure_xui.py" \
     --db "$XUI_DB" \
-    --inbound-port "$INBOUND_PORT"
+    --inbound-port "$INBOUND_PORT" \
+    --reality-server-name "$REALITY_SERVER_NAME"
 systemctl restart x-ui
 systemctl is-active --quiet x-ui
 
