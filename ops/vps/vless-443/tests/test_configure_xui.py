@@ -54,6 +54,8 @@ class ConfigureXuiTest(unittest.TestCase):
                     str(database_path),
                     "--inbound-port",
                     "2087",
+                    "--reality-server-name",
+                    "dl.google.com",
                 ],
                 capture_output=True,
                 text=True,
@@ -73,8 +75,16 @@ class ConfigureXuiTest(unittest.TestCase):
                 updated_settings["tcpSettings"]["acceptProxyProtocol"]
             )
             self.assertEqual(
-                updated_settings["realitySettings"],
-                original_settings["realitySettings"],
+                updated_settings["realitySettings"]["dest"],
+                "dl.google.com:443",
+            )
+            self.assertEqual(
+                updated_settings["realitySettings"]["serverNames"],
+                ["dl.google.com"],
+            )
+            self.assertEqual(
+                updated_settings["realitySettings"]["privateKey"],
+                "unchanged-private-key",
             )
             self.assertEqual(
                 updated_settings["tcpSettings"]["header"],

@@ -10,7 +10,7 @@ its UDP ports.
 
 - nginx terminates TLS for `alfanib.ru` and `www.alfanib.ru` on TCP `443`.
 - Xray listens on TCP `2087` with VLESS, Reality, and Vision.
-- The Reality target and client SNI are `www.bing.com`.
+- The Reality target and client SNI are `dl.google.com`.
 - nginx has the dynamic stream module and TLS SNI support enabled.
 - TCP `8443` and `1443` are already occupied; `127.0.0.1:10443` is free.
 - AmneziaWG uses UDP `42692` and is outside this change.
@@ -26,7 +26,7 @@ Internet TCP 443
         v
 nginx stream + ssl_preread
         |
-        +-- SNI www.bing.com ----------> 127.0.0.1:2087 (Xray Reality)
+        +-- SNI dl.google.com ---------> 127.0.0.1:2087 (Xray Reality)
         |
         +-- every other SNI/default ---> 127.0.0.1:10443 (nginx HTTPS)
 ```
@@ -64,7 +64,7 @@ the old public `2087` path is removed after the switch.
 - Public `https://alfanib.ru/` returns HTTP `200` with the existing certificate.
 - Public `/rest/v1/` reaches the existing Supabase proxy rather than nginx
   default content.
-- A VLESS client using public port `443`, SNI `www.bing.com`, and the existing
+- A VLESS client using public port `443`, SNI `dl.google.com`, and the existing
   credentials reaches an HTTPS endpoint and reports public IP `2.26.106.1`.
 - TCP `2087` no longer listens publicly.
 - AmneziaWG container, UDP `42692`, WireGuard UDP `51820`, WhatsApp proxy, and

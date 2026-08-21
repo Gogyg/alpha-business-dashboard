@@ -12,10 +12,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", type=Path, required=True)
     parser.add_argument("--inbound-port", type=int, required=True)
+    parser.add_argument("--reality-server-name", required=True)
     return parser.parse_args()
 
 
-def configure(database_path: Path, inbound_port: int) -> int:
+def configure(database_path: Path, inbound_port: int, reality_server_name: str) -> int:
     if not database_path.is_file():
         raise ValueError(f"x-ui database does not exist: {database_path}")
 
@@ -49,6 +50,9 @@ def configure(database_path: Path, inbound_port: int) -> int:
 
         tcp_settings = settings.setdefault("tcpSettings", {})
         tcp_settings["acceptProxyProtocol"] = True
+        reality_settings = settings.setdefault("realitySettings", {})
+        reality_settings["dest"] = f"{reality_server_name}:443"
+        reality_settings["serverNames"] = [reality_server_name]
         connection.execute(
             """
             UPDATE inbounds
@@ -73,7 +77,11 @@ def configure(database_path: Path, inbound_port: int) -> int:
 def main() -> int:
     args = parse_args()
     try:
-        inbound_id = configure(args.db, args.inbound_port)
+        inbound_id = configure(
+            args.db,
+            args.inbound_port,
+            args.reality_server_name,
+        )
     except (ValueError, json.JSONDecodeError, sqlite3.Error) as error:
         print(f"configure_xui: {error}", file=sys.stderr)
         return 1
