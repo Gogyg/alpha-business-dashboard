@@ -110,6 +110,20 @@ done
 /usr/local/x-ui/bin/xray-linux-amd64 run -test \
     -config /usr/local/x-ui/bin/config.json >/dev/null
 
+echo "waiting for Xray listener on 127.0.0.1:2087"
+listener_ready=0
+for _ in $(seq 1 20); do
+    if ss -H -lnt '( sport = :2087 )' | grep -q '127.0.0.1:2087'; then
+        listener_ready=1
+        break
+    fi
+    sleep 1
+done
+if [[ $listener_ready -ne 1 ]]; then
+    echo "Xray listener did not start on 127.0.0.1:2087" >&2
+    exit 1
+fi
+
 systemctl reload nginx
 "$SCRIPT_DIR/smoke.sh" "$BACKUP_DIR"
 
