@@ -108,3 +108,22 @@ Bucket: `presentations` (private)
 ## Production Correctness Principle
 Feature logic that should be shared across users must use Supabase/VPS-backed persistence.
 `localStorage` is allowed only for per-browser transient UI state, not for shared business data.
+
+## Shared TCP 443 Edge Routing
+
+The VPS shares public TCP `443` between the dashboard HTTPS endpoint and a
+VLESS Reality inbound. nginx stream performs TLS SNI inspection without
+terminating the public connection:
+
+- `www.bing.com` routes to Xray on `127.0.0.1:2087`.
+- every other SNI, including `alfanib.ru` and `www.alfanib.ru`, routes to the
+  nginx HTTPS virtual host on `127.0.0.1:10443`.
+
+The stream proxy sends PROXY protocol to both loopback backends. The HTTPS
+virtual host restores the client address before forwarding requests to
+Supabase. Xray is loopback-only and accepts PROXY protocol. AmneziaWG remains
+independent on UDP `42692`; this routing does not alter UDP services.
+
+Tracked templates and deployment tooling live in `ops/vps/vless-443/`. See
+`docs/runbooks/vless-443-sni-routing.md` for deployment, validation, and
+rollback.
