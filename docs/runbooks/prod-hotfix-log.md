@@ -53,3 +53,35 @@ This log is mandatory for any manual changes made directly on production infrast
 - Rollback note:
   - Restore previous `.env.local` backup and rebuild.
 
+---
+
+## 2026-08-21 (Europe/Moscow)
+
+### VLESS Reality and `alfanib.ru` shared public TCP 443
+- Incident/symptom:
+  - The existing VLESS Reality inbound used public TCP `2087`, while router clients required TCP `443`.
+  - Public TCP `443` was already owned by nginx for `alfanib.ru`.
+- Root cause:
+  - Two independent TCP services cannot bind the same public address and port without a protocol-aware front router.
+- Exact production change:
+  - GitHub PRs: `#7` (deployment and routing) and `#8` (Xray listener readiness check).
+  - Production release commit: `d65a121e01cd6e5d126a97e5eb3649e8e8b96a14`.
+  - Deployment command from a clean detached `origin/main` worktree:
+    - `./ops/vps/vless-443/deploy.sh`
+  - nginx stream now owns public TCP `443` and routes by TLS SNI:
+    - VLESS Reality SNI to Xray on `127.0.0.1:2087`.
+    - all other SNI values to nginx HTTPS on `127.0.0.1:10443`.
+  - PROXY protocol is enabled on both internal routes.
+  - x-ui inbound `1` was restricted to loopback and configured to accept PROXY protocol.
+  - Final backup: `/root/backups/vless-443-20260821-154816`.
+  - Two earlier attempts rolled back automatically because x-ui reported active before Xray opened its listener. PR `#8` added a bounded readiness wait before smoke testing.
+- Validation:
+  - Infrastructure tests passed `8/8` on the VPS release worktree.
+  - `nginx -t`, nginx, x-ui, site, auth, REST, and storage smoke checks passed.
+  - VLESS traffic through public TCP `443` returned external IP `2.26.106.1`; external macOS Xray check reached `https://example.com` with HTTP `200`.
+  - Public TCP `443` is owned by nginx; nginx HTTPS listens on `127.0.0.1:10443`; Xray listens on `127.0.0.1:2087` only.
+  - `amnezia-awg2`, `supabase-kong`, and `whatsapp-proxy` retained their container identities and running state.
+  - AmneziaWG UDP `42692` and WireGuard UDP `51820` listeners remained available.
+- Rollback note:
+  - Run `/tmp/alpha-vless-release-d65a121/ops/vps/vless-443/rollback.sh /root/backups/vless-443-20260821-154816`.
+  - Rollback restores nginx and the x-ui SQLite backup, removes SQLite WAL sidecars, verifies database integrity, and reruns the original HTTPS and public TCP `2087` VLESS baseline.
