@@ -11,6 +11,8 @@ nginx -t >/dev/null
 
 curl --fail --silent --show-error --max-time 15 \
     --output /dev/null https://alfanib.ru/
-"$SCRIPT_DIR/smoke_vless.py" --external-port 2087
+"$SCRIPT_DIR/smoke_vless.py" \
+    --server-address 127.0.0.1 \
+    --external-port 2087
 
 echo "production baseline passed"
