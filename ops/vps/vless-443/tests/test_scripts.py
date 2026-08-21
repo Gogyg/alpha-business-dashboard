@@ -74,6 +74,7 @@ class OperationalScriptsTest(unittest.TestCase):
         self.assertIn('[[ "$auth_status" == "401" ]]', smoke)
         self.assertIn('[[ "$rest_status" == "401" ]]', smoke)
         self.assertIn('[[ "$storage_status" == "400" ]]', smoke)
+        self.assertIn("--server-address 127.0.0.1", smoke)
 
     def test_vless_smoke_uses_public_route_without_printing_secrets(self):
         vless_smoke = self.read_script("smoke_vless.py")
@@ -93,6 +94,7 @@ class OperationalScriptsTest(unittest.TestCase):
 
         self.assertIn("https://alfanib.ru/", baseline)
         self.assertIn("--external-port 2087", baseline)
+        self.assertIn("--server-address 127.0.0.1", baseline)
         self.assertIn("smoke_vless.py", baseline)
 
 

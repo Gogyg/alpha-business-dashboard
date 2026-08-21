@@ -64,6 +64,8 @@ cmp "$BASELINE_DIR/container-state.txt" "$current_container_state"
 cmp "$BASELINE_DIR/udp-state.txt" "$current_udp_state"
 cmp "$BASELINE_DIR/tcp-state.txt" "$current_tcp_state"
 
-"$SCRIPT_DIR/smoke_vless.py" --external-port 443
+"$SCRIPT_DIR/smoke_vless.py" \
+    --server-address 127.0.0.1 \
+    --external-port 443
 
 echo "server smoke passed"
