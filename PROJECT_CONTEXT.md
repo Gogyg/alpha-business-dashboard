@@ -148,7 +148,7 @@
 - Current baseline visual style follows an executive dark command-center layout.
 
 ## 9) Production Status (latest known in this context)
-- Code deployed from commit: `2ee6d5f` (main).
+- Code deployed from commit: `cc8ad105565b50ad895faf1a3003cb8d7045bbe5` (main, 2026-10-09, PR #14).
 - VPS build passed.
 - Events singleton migration applied in prod DB.
 - REST checks confirmed:
