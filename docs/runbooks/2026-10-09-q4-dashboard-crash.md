@@ -1,6 +1,6 @@
 # Q4 dashboard crash — 2026-10-09
 
-Status: diagnosed live; release approved by the owner; deployment validation is recorded separately below.
+Status: deployed through GitHub PR #14 on 2026-10-09; production checks completed with the authorization limitations listed below.
 
 ## Evidence
 
@@ -39,3 +39,18 @@ its entire diff. Apply the scoped fix to a clean GitHub branch, review/merge int
 main, then pull and rebuild /var/www/alpha-dashboard. Record resulting commit.
 Smoke-check initial entry and Q4 dashboard, previous quarters and shared saves.
 Rollback by reverting the fix through GitHub and rebuilding the VPS checkout.
+
+## Deployment result
+
+- GitHub PR: https://github.com/Gogyg/alpha-business-dashboard/pull/14 (merged).
+- Deployed code commit: `cc8ad105565b50ad895faf1a3003cb8d7045bbe5`.
+- Backup: `/root/backups/alpha-q4-crash-20261009` (previous dist, commit, working-tree patch, package-lock and DB checksums).
+- VPS Vite build passed using Node 20.20.2; npm dependencies and server environment were not changed. Built in a separate directory, then switched dist. Old JS assets were retained for existing tabs.
+- Live HTTPS `/`, `/login`, `/dashboard`, `/living-dashboard`, `/mbo`, `/ksh-cdpo`, and old asset all returned 200. New entry asset is `index-BUMU3qlg.js`. nginx remained active.
+- voc_metrics checksums before/after deployment are identical; no DB write or migration occurred.
+- Exact old deployed bundle reproduced the original crash at HB / line 444 / column 116550 with the focus-only Q4 fixture. Exact new bundle downloaded from production rendered the same fixture without the route error. All API traffic in replay was mocked and actual backend connections blocked.
+- Desktop 1280x720 and mobile 390x844 checked in view mode. A pre-existing 2px mobile overflow and unavailable logo in the isolated replay are outside the data-loading fix.
+- Live browser displays the login page. Authenticated live dashboard, password-gated editing and cross-user save behavior were not tested; the persistence API was not changed.
+- GitHub external Vercel status checks failed and Netlify preview was pending. No GitHub Actions workflow runs were present; local and target VPS builds passed.
+
+For immediate rollback of static output, preserve current dist under a new backup name and copy the saved `dist` from the backup to `/var/www/alpha-dashboard/dist`. Then revert the fix through GitHub and update the checkout to match. Do not alter the server environment, package-lock or DB during rollback.
