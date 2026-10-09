@@ -197,3 +197,11 @@
 Use this exact first message:
 
 `Прочитай /Users/dmitriimusikhin/Documents/Vibe coding/alpha-business-dashboard-main/PROJECT_CONTEXT.md и работаем строго по нему.`
+
+## 15) Q4 partial-record resilience (2026-10-09)
+
+- A quarter record can contain only `livingDashboardFocus` after focus settings are saved.
+- RedCapPage fills missing fields using the existing quarter defaults on load and when preparing the latest snapshot for saving. Existing values and focus settings remain intact.
+- This fix does not migrate or write database records during loading. Normal edits remain Supabase-backed.
+- Incident and release checks: `docs/runbooks/2026-10-09-q4-dashboard-crash.md`.
+- Regression: `node --test tests/dashboardDefaults.test.mjs` (Node with native TypeScript support, Node 22.18+ or 24+). VPS Node 20 is sufficient for Vite builds.

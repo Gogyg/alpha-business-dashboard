@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { withDashboardDefaults } from '../utils/dashboardDefaults';
 import { Save, Plus, Trash2, Eye, EyeOff, Loader2, ArrowLeft, X, RotateCcw } from 'lucide-react';
 import { Link, useOutletContext } from 'react-router';
 import { PasswordModal } from '../components/PasswordModal';
@@ -486,7 +487,7 @@ export function RedCapPage({
       setLoading(true);
       try {
         const result = await loadDataProp(currentQuarter);
-        const sourceData = result || getDefaultData();
+        const sourceData = withDashboardDefaults(result, getDefaultData());
         
         setDigitalMetrics(syncMetrics(sourceData.digitalMetrics));
         setStabilityMetrics(syncMetrics(sourceData.stabilityMetrics));
@@ -562,7 +563,7 @@ export function RedCapPage({
         purgedWidgets,
         ...(enableTemplateAdd ? { extraWidgets, bottomWidgetOrder } : {}),
       };
-      const latestRaw = (await loadDataProp(currentQuarter)) || getDefaultData();
+      const latestRaw = withDashboardDefaults(await loadDataProp(currentQuarter), getDefaultData());
       const latestPayload = {
         digitalMetrics: syncMetrics(latestRaw.digitalMetrics || []),
         stabilityMetrics: syncMetrics(latestRaw.stabilityMetrics || []),
