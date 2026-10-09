@@ -99,3 +99,10 @@ This log is mandatory for any manual changes made directly on production infrast
   - Protected container identities and UDP `42692`/`51820` listeners were unchanged.
 - Rollback note:
   - Run `/tmp/alpha-vless-release-ad75ac7/ops/vps/vless-443/rollback.sh /root/backups/vless-443-20260821-sni-google`.
+
+## 2026-10-09 — HTTP upload limit for presentations
+- Reason: nginx default request limit can block presentation files below the new 40 MiB application limit.
+- Change: in `/etc/nginx/sites-enabled/alpha`, add `client_max_body_size 50m;` inside `location /storage/`. Back up resolved configuration to `/root/alpha-nginx-before-presentations-20261009.conf`; run `nginx -t` and reload nginx.
+- Storage migration: apply `supabase/migrations/20261009_presentations_40mb.sql` via `docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1`. Global Storage FILE_SIZE_LIMIT is already 52428800 bytes.
+- Validation: nginx config check; bucket file_size_limit=41943040; deployed presentations routes; authenticated PDF binary upload/read/delete smoke.
+- Rollback: restore nginx backup and reload; restore bucket file_size_limit to NULL (previous value); deploy previous GitHub revision 8adf5ab and rebuild. MIME allowlist was NULL before the migration and remains NULL.
