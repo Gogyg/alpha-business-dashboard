@@ -83,3 +83,7 @@ Path conventions:
 ## Anti-Pattern
 Do not keep shared business data only in `localStorage`.
 `localStorage` is only for per-browser transient UI state.
+
+## Partial quarter dashboard records
+
+`LivingDashboard.saveFocusConfig` may create a `voc_metrics` row containing only `livingDashboardFocus`. Consumers must not assume every dashboard field exists. `RedCapPage` applies `withDashboardDefaults` on loading and on the latest snapshot used for conflict-aware saves. It preserves present values, zero values, empty arrays and extra settings, and fills missing/null fields from the existing quarter defaults. Loading is read-only; saving continues through Supabase. No migration or browser-only persistence is introduced.
