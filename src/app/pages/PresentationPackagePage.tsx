@@ -265,6 +265,14 @@ export function PresentationPackagePage() {
     return { map, cleanupUrls };
   }, [item]);
 
+  const [pdfUrl, setPdfUrl] = useState<string>();
+  useEffect(() => {
+    if (activePage?.mimeType !== 'application/pdf') { setPdfUrl(undefined); return; }
+    const url = URL.createObjectURL(new Blob([decodeBase64(activePage.htmlContent)], { type: 'application/pdf' }));
+    setPdfUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [activePage]);
+
   useEffect(() => {
     return () => {
       assetsMap.cleanupUrls.forEach((url) => URL.revokeObjectURL(url));
@@ -272,7 +280,7 @@ export function PresentationPackagePage() {
   }, [assetsMap.cleanupUrls]);
 
   const srcDoc = useMemo(() => {
-    if (!activePage) return '';
+    if (!activePage || activePage.mimeType === 'application/pdf') return '';
     const withAssets = rewriteAssetLinks(activePage.htmlContent, assetsMap.map);
     return injectNavigationBridge(withAssets);
   }, [activePage, assetsMap.map]);
@@ -392,11 +400,13 @@ export function PresentationPackagePage() {
       const addedPageIds: string[] = [];
 
       for (const file of pendingUploadFiles) {
+        if (file.size > 40 * 1024 * 1024) throw new Error(`Файл «${file.name}» превышает лимит 40 МБ.`);
         const fileName = toPackagePath(file);
         const normalizedPath = normalizeRelativePath(fileName);
 
-        if (isHtmlFile(fileName)) {
-          const htmlContent = await readFileAsText(file);
+        if (isHtmlFile(fileName) || /\.pdf$/i.test(fileName)) {
+          const mimeType = /\.pdf$/i.test(fileName) ? 'application/pdf' : 'text/html';
+          const htmlContent = mimeType === 'application/pdf' ? await readFileAsBase64(file) : await readFileAsText(file);
           const existingIndex = pageIndexByPath.get(normalizedPath);
 
           if (typeof existingIndex === 'number') {
@@ -404,6 +414,7 @@ export function PresentationPackagePage() {
               ...nextPages[existingIndex],
               fileName,
               htmlContent,
+              mimeType,
             };
           } else {
             const pageId = crypto.randomUUID();
@@ -411,6 +422,7 @@ export function PresentationPackagePage() {
               id: pageId,
               fileName,
               htmlContent,
+              mimeType,
             });
             pageIndexByPath.set(normalizedPath, nextPages.length - 1);
             addedPageIds.push(pageId);
@@ -462,7 +474,8 @@ export function PresentationPackagePage() {
   };
 
   const downloadHtmlFile = (fileName: string, htmlContent: string) => {
-    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const isPdf = /\.pdf$/i.test(fileName);
+    const blob = new Blob([isPdf ? decodeBase64(htmlContent) : htmlContent], { type: isPdf ? 'application/pdf' : 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -584,9 +597,9 @@ export function PresentationPackagePage() {
 
         {isOrderEditing && (
           <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 md:p-5">
-            <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
               <div className="text-white font-semibold">Настройки просмотра</div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   variant="outline"
                   onClick={handleOrderCancel}
@@ -613,9 +626,9 @@ export function PresentationPackagePage() {
                 onChange={(event) => setShowPageQuickNav(event.target.checked)}
                 className="w-4 h-4 rounded border-white/20 bg-black/40"
               />
-              <span>Показывать кнопки с названиями HTML-страниц</span>
+              <span>Показывать кнопки с названиями файлов</span>
             </label>
-            <div className="text-white font-semibold mb-2">Порядок лендингов</div>
+            <div className="text-white font-semibold mb-2">Порядок файлов</div>
             <div className="space-y-2">
               {orderDraft.map((pageId, index) => {
                 const page = pagesDraft.find((entry) => entry.id === pageId);
@@ -629,7 +642,7 @@ export function PresentationPackagePage() {
                     <div className="w-7 h-7 rounded-lg bg-white/10 text-white text-xs flex items-center justify-center">
                       {index + 1}
                     </div>
-                    <div className="flex-1 text-gray-200 text-sm truncate">{getPageDisplayName(page.fileName)}</div>
+                    <div className="min-w-0 flex-1 text-gray-200 text-sm truncate">{getPageDisplayName(page.fileName)}</div>
                     <button
                       type="button"
                       onClick={() => moveDraftPage(pageId, 'up')}
@@ -658,20 +671,20 @@ export function PresentationPackagePage() {
               })}
             </div>
             <div className="mt-4 border-t border-white/10 pt-4 space-y-3">
-              <div className="text-white font-semibold">Добавить или заменить страницы/ассеты</div>
+              <div className="text-white font-semibold">Добавить или заменить HTML, PDF и ассеты</div>
               <label className="w-full border border-dashed border-white/20 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-emerald-400/40 hover:bg-white/[0.02] transition-all">
                 <Upload size={18} className="text-gray-300" />
                 <span className="text-sm text-gray-200">Выбрать файлы</span>
                 <input
                   type="file"
                   multiple
-                  accept=".html,.htm,.xhtml,.css,.js,.json,.map,.svg,.png,.jpg,.jpeg,.gif,.webp,.ico,.woff,.woff2,.ttf,.otf,.txt"
+                  accept=".pdf,.html,.htm,.xhtml,.css,.js,.json,.map,.svg,.png,.jpg,.jpeg,.gif,.webp,.ico,.woff,.woff2,.ttf,.otf,.txt"
                   className="hidden"
                   onChange={(event) => setPendingUploadFiles(Array.from(event.target.files || []))}
                 />
               </label>
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-xs text-gray-400">К загрузке: {pendingUploadFiles.length} файлов</div>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-xs text-gray-400">К загрузке: {pendingUploadFiles.length} файлов · до 40 МБ каждый</div>
                 <Button
                   onClick={() => void handleImportFilesToDraft()}
                   disabled={isUploadingFiles || pendingUploadFiles.length === 0}
@@ -683,7 +696,7 @@ export function PresentationPackagePage() {
               </div>
             </div>
             <div className="mt-4 border-t border-white/10 pt-4 space-y-3">
-              <div className="text-white font-semibold">Выгрузка HTML</div>
+              <div className="text-white font-semibold">Выгрузка файлов</div>
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
@@ -692,7 +705,7 @@ export function PresentationPackagePage() {
                   className="bg-white/5 border-white/10 text-white"
                 >
                   <Download size={14} className="mr-2" />
-                  Выгрузить текущий HTML
+                  Выгрузить текущий файл
                 </Button>
                 <Button
                   variant="outline"
@@ -701,7 +714,7 @@ export function PresentationPackagePage() {
                   className="bg-white/5 border-white/10 text-white"
                 >
                   <Download size={14} className="mr-2" />
-                  Выгрузить все HTML
+                  Выгрузить все файлы
                 </Button>
               </div>
             </div>
@@ -713,8 +726,9 @@ export function PresentationPackagePage() {
             ref={iframeRef}
             key={activePage?.id || 'empty'}
             title={activePage?.fileName || 'presentation-preview'}
-            srcDoc={srcDoc}
-            sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
+            src={activePage?.mimeType === 'application/pdf' ? pdfUrl : undefined}
+            srcDoc={activePage?.mimeType === 'application/pdf' ? undefined : srcDoc}
+            sandbox={activePage?.mimeType === 'application/pdf' ? undefined : 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups'}
             className="w-full h-[86vh] bg-white"
           />
         </div>

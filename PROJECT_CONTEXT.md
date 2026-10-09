@@ -205,3 +205,9 @@ Use this exact first message:
 - This fix does not migrate or write database records during loading. Normal edits remain Supabase-backed.
 - Incident and release checks: `docs/runbooks/2026-10-09-q4-dashboard-crash.md`.
 - Regression: `node --test tests/dashboardDefaults.test.mjs` (Node with native TypeScript support, Node 22.18+ or 24+). VPS Node 20 is sufficient for Vite builds.
+
+## Презентации — релиз 2026-10-09
+- Загрузка HTML и PDF, просмотр внутри раздела, скачивание. Лимит каждого файла 40 МБ.
+- Файлы в приватном Supabase Storage, метаданные в БД; формат старых HTML совместим.
+- Миграция `20261009_presentations_40mb.sql`; nginx для Storage: `client_max_body_size 50m`.
+- Документация: `docs/features/presentations.md`.

@@ -244,14 +244,17 @@ export function PresentationsPage() {
     const assets: PresentationAssetPayload[] = [];
 
     for (const file of files) {
+      if (file.size > 40 * 1024 * 1024) throw new Error(`Файл «${file.name}» превышает лимит 40 МБ.`);
       const fileName = toPackagePath(file);
 
-      if (isHtmlFile(fileName)) {
-        const htmlContent = await readFileAsText(file);
+      if (isHtmlFile(fileName) || /\.pdf$/i.test(fileName)) {
+        const mimeType = /\.pdf$/i.test(fileName) ? 'application/pdf' : 'text/html';
+        const htmlContent = mimeType === 'application/pdf' ? await readFileAsBase64(file) : await readFileAsText(file);
         pages.push({
           id: crypto.randomUUID(),
           fileName,
           htmlContent,
+          mimeType,
         });
         continue;
       }
@@ -269,7 +272,7 @@ export function PresentationsPage() {
     }
 
     if (pages.length === 0) {
-      throw new Error('Добавьте минимум один HTML-файл.');
+      throw new Error('Добавьте минимум один HTML- или PDF-файл.');
     }
 
     return { pages, assets };
@@ -283,7 +286,7 @@ export function PresentationsPage() {
         return;
       }
       if (newFiles.length === 0) {
-        alert('Загрузите HTML-файлы и связанные ассеты.');
+        alert('Загрузите HTML- или PDF-файлы и связанные ассеты.');
         return;
       }
 
@@ -531,7 +534,7 @@ export function PresentationsPage() {
           <DialogHeader>
             <DialogTitle className="text-2xl">Новая презентация</DialogTitle>
             <DialogDescription className="text-gray-400">
-              Загрузите один или несколько HTML-файлов и связанные ассеты. Внутренние ссылки между страницами будут обработаны в рамках пакета.
+              Загрузите один или несколько HTML- или PDF-файлов (до 40 МБ каждый) и связанные ассеты. Внутренние ссылки между страницами будут обработаны в рамках пакета.
             </DialogDescription>
           </DialogHeader>
 
@@ -588,13 +591,13 @@ export function PresentationsPage() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-300 block mb-2">Загрузить лендинг (HTML) и ассеты</label>
+              <label className="text-sm font-medium text-gray-300 block mb-2">Загрузить HTML, PDF и ассеты (до 40 МБ на файл)</label>
               <label className="w-full h-28 border border-dashed border-white/20 rounded-2xl flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-[#34d399]/40 hover:bg-white/[0.02] transition-all">
                 <FileUp className="text-gray-400" size={24} />
                 <span className="text-sm text-gray-300">Выбрать файлы</span>
                 <input
                   type="file"
-                  accept=".html,.htm,.css,.js,.json,.png,.jpg,.jpeg,.gif,.svg,.webp,.ico,.woff,.woff2,.ttf,.otf"
+                  accept=".pdf,.html,.htm,.css,.js,.json,.png,.jpg,.jpeg,.gif,.svg,.webp,.ico,.woff,.woff2,.ttf,.otf"
                   multiple
                   className="hidden"
                   onChange={(event) => setNewFiles(Array.from(event.target.files || []))}

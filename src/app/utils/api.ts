@@ -528,6 +528,8 @@ export interface PresentationPagePayload {
   id: string;
   fileName: string;
   htmlContent: string;
+  /** PDF bytes are base64 encoded; HTML remains plain text for compatibility. */
+  mimeType?: string;
 }
 
 export interface PresentationAssetPayload {
@@ -648,6 +650,7 @@ const mapRowToPresentationSummary = (row: PresentationRow): PresentationPackageP
       id: page.id,
       fileName: page.fileName,
       htmlContent: '',
+      mimeType: page.mimeType,
     })),
     assets: assetsMeta.map((asset) => ({
       id: asset.id,
@@ -664,11 +667,14 @@ const uploadPresentationPage = async (
   page: PresentationPagePayload,
 ): Promise<PresentationStoredFileMeta> => {
   const storagePath = buildStoragePath(packageId, 'pages', page.id, page.fileName);
-  const blob = new Blob([page.htmlContent], { type: 'text/html;charset=utf-8' });
+  const isPdf = page.mimeType === 'application/pdf';
+  const contentType = isPdf ? 'application/pdf' : 'text/html; charset=utf-8';
+  const blob = new Blob([isPdf ? base64ToUint8Array(page.htmlContent) : page.htmlContent], { type: contentType });
+  if (blob.size > 40 * 1024 * 1024) throw new Error(`Файл «${page.fileName}» превышает лимит 40 МБ.`);
 
   const { error } = await supabase.storage.from(PRESENTATIONS_BUCKET).upload(storagePath, blob, {
     upsert: true,
-    contentType: 'text/html; charset=utf-8',
+    contentType,
   });
   if (error) {
     throw new Error(`Storage upload failed for page "${page.fileName}" (${storagePath}): ${error.message}`);
@@ -678,8 +684,8 @@ const uploadPresentationPage = async (
     id: page.id,
     fileName: page.fileName,
     storagePath,
-    mimeType: 'text/html',
-    encoding: 'text',
+    mimeType: isPdf ? 'application/pdf' : 'text/html',
+    encoding: isPdf ? 'base64' : 'text',
   };
 };
 
@@ -694,6 +700,7 @@ const uploadPresentationAsset = async (
       ? new Blob([asset.content], { type: mimeType })
       : new Blob([base64ToUint8Array(asset.content)], { type: mimeType });
 
+  if (body.size > 40 * 1024 * 1024) throw new Error(`Файл «${asset.fileName}» превышает лимит 40 МБ.`);
   const { error } = await supabase.storage.from(PRESENTATIONS_BUCKET).upload(storagePath, body, {
     upsert: true,
     contentType: mimeType,
@@ -715,11 +722,14 @@ const downloadPresentationPage = async (meta: PresentationStoredFileMeta): Promi
   const { data, error } = await supabase.storage.from(PRESENTATIONS_BUCKET).download(meta.storagePath);
   if (error) throw new Error(error.message);
 
-  const htmlContent = await data.text();
+  const htmlContent = meta.mimeType === 'application/pdf'
+    ? arrayBufferToBase64(await data.arrayBuffer())
+    : await data.text();
   return {
     id: meta.id,
     fileName: meta.fileName,
     htmlContent,
+    mimeType: meta.mimeType,
   };
 };
 
