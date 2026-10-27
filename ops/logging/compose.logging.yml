@@ -1,0 +1,35 @@
+# Automatically loaded alongside /opt/supabase/docker/docker-compose.yml.
+# Keep the existing json-file format used by the Vector Docker log source.
+x-bounded-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "3"
+
+services:
+  db:
+    logging: *bounded-logging
+  analytics:
+    logging: *bounded-logging
+  studio:
+    logging: *bounded-logging
+  kong:
+    logging: *bounded-logging
+  imgproxy:
+    logging: *bounded-logging
+  rest:
+    logging: *bounded-logging
+  storage:
+    logging: *bounded-logging
+  auth:
+    logging: *bounded-logging
+  realtime:
+    logging: *bounded-logging
+  supavisor:
+    logging: *bounded-logging
+  vector:
+    logging: *bounded-logging
+  functions:
+    logging: *bounded-logging
+  meta:
+    logging: *bounded-logging
