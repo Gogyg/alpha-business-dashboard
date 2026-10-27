@@ -214,7 +214,7 @@ Use this exact first message:
 
 ## Production log retention — 2026-10-27
 
-- Approved infrastructure-only maintenance: journald up to 500 MiB / 14 days; Supabase Docker stdout logs up to 3 x 20 MiB per container.
+- Deployed via GitHub PR #17 on VPS `2.26.106.1`: journald up to 500 MiB / 14 days; Supabase Docker stdout logs up to 3 x 20 MiB per container.
 - Source assets: `ops/logging/`; installation, backups, validation and rollback: `docs/runbooks/log-retention.md` and the hotfix log.
 - Keep all shared business data, Storage files, replication state, VPN and proxy configurations. Do not use unrestricted Docker prune commands.
-- Frontend source/build and database schema do not change for this maintenance. Rollout results are recorded separately after applying on the VPS.
+- Frontend source/build and database schema were unchanged. Verified results and coverage limits: `docs/runbooks/prod-hotfix-log.md` (2026-10-27); ~8.86 GiB freed, all business-table and Storage file fingerprints preserved.
