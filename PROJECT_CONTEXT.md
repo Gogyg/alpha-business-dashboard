@@ -211,3 +211,10 @@ Use this exact first message:
 - Файлы в приватном Supabase Storage, метаданные в БД; формат старых HTML совместим.
 - Миграция `20261009_presentations_40mb.sql`; nginx для Storage: `client_max_body_size 50m`.
 - Документация: `docs/features/presentations.md`.
+
+## Production log retention — 2026-10-27
+
+- Approved infrastructure-only maintenance: journald up to 500 MiB / 14 days; Supabase Docker stdout logs up to 3 x 20 MiB per container.
+- Source assets: `ops/logging/`; installation, backups, validation and rollback: `docs/runbooks/log-retention.md` and the hotfix log.
+- Keep all shared business data, Storage files, replication state, VPN and proxy configurations. Do not use unrestricted Docker prune commands.
+- Frontend source/build and database schema do not change for this maintenance. Rollout results are recorded separately after applying on the VPS.
