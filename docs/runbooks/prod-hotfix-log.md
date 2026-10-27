@@ -106,3 +106,13 @@ This log is mandatory for any manual changes made directly on production infrast
 - Storage migration: apply `supabase/migrations/20261009_presentations_40mb.sql` via `docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1`. Global Storage FILE_SIZE_LIMIT is already 52428800 bytes.
 - Validation: nginx config check; bucket file_size_limit=41943040; deployed presentations routes; authenticated PDF binary upload/read/delete smoke.
 - Rollback: restore nginx backup and reload; restore bucket file_size_limit to NULL (previous value); deploy previous GitHub revision 8adf5ab and rebuild. MIME allowlist was NULL before the migration and remains NULL.
+
+## 2026-10-27 — Bounded diagnostic log retention (Europe/Moscow)
+- Reason: unbounded journald (~4.1 GiB) and Supabase Docker stdout logs (~3.3 GiB).
+- Approved scope: journald 500 MiB / 14 days / 2 GiB free-space reserve; all 13 existing Supabase containers use json-file rotation at 20 MiB x 3. nginx retains its daily/14-archive policy. No application, database schema, VPN, proxy or image-version changes.
+- Reproducible configuration: `ops/logging/journald.conf`, `ops/logging/compose.logging.yml`; procedure and rollback: `docs/runbooks/log-retention.md`.
+- Target files: `/etc/systemd/journald.conf.d/60-alpha-retention.conf`, `/opt/supabase/docker/docker-compose.override.yml`. Run `systemctl restart systemd-journald`, `journalctl --rotate`, `journalctl --vacuum-time=14d --vacuum-size=500M`. Recreate Supabase services individually with `docker-compose up -d --no-deps --force-recreate --no-build --pull never SERVICE` after validating the resolved configuration changes only logging.
+- Backup prepared before rollout: `/var/backups/alpha-dashboard/log-retention-20261027T192159Z` (root-only), containing globals, both database dumps, config/Storage archive, custom PostgreSQL config, Docker log archives and pre-change data fingerprints. Full archive blocks, tar/gzip integrity and SHA-256 manifest checked; this is not a full restore test. Offline PostgreSQL backup is required before db recreation.
+- Additional maintenance: clear only npm download cache; stop the abandoned tcpdump PID 2313629 only after confirming its original start time/open file, and retain its capture. Do not prune images or delete replication files.
+- Deployment/validation: pending at merge; append actual measurements and verification after VPS rollout. Frontend dist must remain byte-for-byte unchanged.
+- Rollback: remove only the newly installed drop-in/override, restart journald and recreate affected services using the original Compose/image/mount configuration. Do not restore old databases over new writes. Expired system journal history is intentionally removed; Docker history is archived.
