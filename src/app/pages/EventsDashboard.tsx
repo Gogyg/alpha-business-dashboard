@@ -12,6 +12,7 @@ import { ru } from 'date-fns/locale';
 
 interface OutletContext {
   isEditingMode: boolean;
+  readOnly: boolean;
   setIsEditingMode: (value: boolean) => void;
 }
 
@@ -258,7 +259,7 @@ const modalCalendarClassNames = {
 };
 
 export function EventsDashboard() {
-  const { isEditingMode, setIsEditingMode } = useOutletContext<OutletContext>();
+  const { isEditingMode, setIsEditingMode, readOnly } = useOutletContext<OutletContext>();
   const today = useMemo(() => startOfDay(new Date()), []);
   const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
@@ -781,7 +782,7 @@ export function EventsDashboard() {
                 month={calendarStartMonth}
                 onMonthChange={(month) => setCalendarStartMonth(startOfMonth(month))}
                 onDayClick={(date) => {
-                  requestCreateOnDate(date);
+                  if (!readOnly) requestCreateOnDate(date);
                 }}
                 className="mx-auto w-fit p-0"
                 classNames={{
@@ -868,15 +869,17 @@ export function EventsDashboard() {
                   <span className="absolute bottom-2 right-2.5 text-xs text-gray-400">Всего: {listItems.length}</span>
                 </div>
 
-                <div className="flex shrink-0 flex-col items-end gap-1 self-start sm:pr-2 sm:self-auto">
-                  <button
-                    onClick={() => openAddModal()}
-                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-gradient-to-r from-emerald-600 to-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow-lg shadow-emerald-500/20 transition-all hover:from-emerald-500 hover:to-emerald-600"
-                  >
-                    <Plus size={14} />
-                    Добавить событие
-                  </button>
-                </div>
+{!readOnly && (
+                  <div className="flex shrink-0 flex-col items-end gap-1 self-start sm:pr-2 sm:self-auto">
+                    <button
+                      onClick={() => openAddModal()}
+                      className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-gradient-to-r from-emerald-600 to-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow-lg shadow-emerald-500/20 transition-all hover:from-emerald-500 hover:to-emerald-600"
+                    >
+                      <Plus size={14} />
+                      Добавить событие
+                    </button>
+                  </div>
+)}
               </div>
 
               <div className="relative min-h-0 flex-1">
@@ -1022,6 +1025,7 @@ export function EventsDashboard() {
                     <PopoverTrigger asChild>
                       <button
                         type="button"
+                        disabled={readOnly}
                         className="flex w-full items-center justify-between rounded-lg border border-gray-700/50 bg-[#1A1F2A] px-3 py-2 text-left text-sm text-white"
                       >
                         <span>{newEventDraftDate ? format(newEventDraftDate, 'dd.MM.yyyy') : 'Выберите дату'}</span>
@@ -1168,6 +1172,7 @@ export function EventsDashboard() {
                 <span className={cn('h-3 w-3 rounded-full', colorStyles[detailDraft.color].dot)} />
                 <input
                   type="text"
+                  readOnly={readOnly}
                   value={detailDraft.title}
                   onChange={(e) => setDetailDraft((prev) => (prev ? { ...prev, title: e.target.value } : prev))}
                   className="w-full bg-transparent text-xl font-bold text-white outline-none placeholder:text-white/50"
@@ -1188,6 +1193,7 @@ export function EventsDashboard() {
                     <button
                       key={color}
                       type="button"
+                      disabled={readOnly}
                       onClick={() => setDetailDraft((prev) => (prev ? { ...prev, color } : prev))}
                       className={cn(
                         'inline-flex h-7 w-7 items-center justify-center rounded-full border transition-all',
@@ -1240,6 +1246,7 @@ export function EventsDashboard() {
                     </div>
                   ) : (
                     <select
+                      disabled={readOnly}
                       value={detailDraft.status === 'passed' ? 'not_started' : detailDraft.status}
                       onChange={(e) =>
                         setDetailDraft((prev) => (prev ? { ...prev, status: e.target.value as EventStatus } : prev))
@@ -1259,6 +1266,7 @@ export function EventsDashboard() {
               <div>
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-gray-400">Описание (опционально)</label>
                 <textarea
+                  readOnly={readOnly}
                   value={detailDraft.description}
                   onChange={(e) => setDetailDraft((prev) => (prev ? { ...prev, description: e.target.value } : prev))}
                   rows={6}
@@ -1269,13 +1277,15 @@ export function EventsDashboard() {
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => removeEvent(detailDraft.id)}
-                className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-sm text-red-300 hover:bg-red-500/20"
-              >
-                Удалить событие
-              </button>
+{!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => removeEvent(detailDraft.id)}
+                  className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-sm text-red-300 hover:bg-red-500/20"
+                >
+                  Удалить событие
+                </button>
+)}
               <button
                 type="button"
                 onClick={() => {
@@ -1286,13 +1296,15 @@ export function EventsDashboard() {
               >
                 Закрыть
               </button>
-              <button
-                type="button"
-                onClick={applyDetailDraft}
-                className="rounded-lg border border-red-500/40 bg-red-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-600"
-              >
-                Сохранить изменения
-              </button>
+{!readOnly && (
+                <button
+                  type="button"
+                  onClick={applyDetailDraft}
+                  className="rounded-lg border border-red-500/40 bg-red-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-600"
+                >
+                  Сохранить изменения
+                </button>
+)}
             </div>
           </div>
         </div>

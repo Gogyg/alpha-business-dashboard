@@ -177,7 +177,7 @@ export default function Login() {
               >
                 ← К входу
               </button>
-            ) : (
+            ) : import.meta.env.VITE_PUBLIC_DASHBOARD !== "true" && (
               <button
                 onClick={() => {
                   setIsLogin(!isLogin);

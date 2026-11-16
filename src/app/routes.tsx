@@ -16,7 +16,8 @@ import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import { subscribeToAuthState, syncAuthStateFromSupabase } from "./utils/api";
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+const DashboardRoute = () => {
+  const allowGuests = import.meta.env.VITE_PUBLIC_DASHBOARD === "true";
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -57,11 +58,11 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     return <div className="min-h-screen bg-[#0a0a0f]" />;
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !allowGuests) {
     return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
+  return <Layout key={String(isAuthenticated)} readOnly={!isAuthenticated} />;
 };
 
 export const router = createBrowserRouter([
@@ -75,11 +76,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/",
-    element: (
-      <ProtectedRoute>
-        <Layout />
-      </ProtectedRoute>
-    ),
+    element: <DashboardRoute />,
     children: [
       { index: true, Component: Dashboard },
       { path: "living-dashboard", Component: LivingDashboard },
