@@ -1,6 +1,6 @@
 # Baked Design preview
 
-The public preview is a static capture of the existing Living Dashboard demo fixture. It contains sample figures, SVG charts, and the app icon. Its HTML renders without JavaScript, API access, or an authenticated browser. The same preview is served at the domain root and at `/living-dashboard` so website scanners can use either route.
+The public preview is a static catalog combining the Living Dashboard and the Red Cap demo fixtures. It includes the app navigation, quarter selection, sample editor, KPI tables, charts, calendar, form controls, statuses, and product cards. Quarter and edit interactions use native HTML controls and only demonstrate visual states. Its HTML renders without JavaScript, API access, or an authenticated browser. The same preview is served at the domain root and at `/living-dashboard` so website scanners can use either route.
 
 ## Deployment
 
