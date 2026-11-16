@@ -6,7 +6,7 @@ The build-time setting `VITE_PUBLIC_DASHBOARD=true` opens dashboard routes to vi
 
 1. Build and test from GitHub main with `VITE_PUBLIC_DASHBOARD=true`.
 2. Set `DISABLE_SIGNUP=true` in the Supabase Compose environment and restart only the `auth` service. Existing users can sign in; public self-registration would otherwise grant edit access.
-3. Save the pre-change direct grants for `anon` on tables in the `public` schema and on `storage.objects` and `storage.buckets`. Run `ops/guest-dashboard/enable.sql` with `psql -v ON_ERROR_STOP=1`. It revokes guest writes and adds guest reads to MBO.
+3. Save the pre-change write grants for `anon` and `PUBLIC` in the `public` schema and for `anon` on `storage.objects` and `storage.buckets`. Preserve grantors and grant options. Run `ops/guest-dashboard/enable.sql` with `docker exec -i supabase-db psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1` to change both public and storage ACLs in one transaction. It revokes guest writes and adds guest reads to MBO.
 4. Publish the build and verify all sections with a fresh browser context. Check an anonymous database write is denied and authenticated editing rights remain.
 
 ## Restore required login
