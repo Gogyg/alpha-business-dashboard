@@ -11,6 +11,7 @@ interface OutletContext {
   setCurrentQuarter: (quarter: string) => void;
   currentYear: number;
   isEditingMode?: boolean;
+  readOnly?: boolean;
   setIsEditingMode?: (value: boolean) => void;
 }
 
@@ -39,6 +40,7 @@ const CATEGORY_WEIGHTS = {
 
 export function Goals() {
   const outletContext = useOutletContext<OutletContext>();
+  const readOnly = outletContext?.readOnly;
   const { currentQuarter = 'Q1', currentYear = 2026 } = outletContext || {};
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
   const [isSelectExecutorModalOpen, setIsSelectExecutorModalOpen] = useState(false);
@@ -393,22 +395,24 @@ export function Goals() {
               <Filter size={20} className="text-gray-400" />
               <h3 className="text-lg font-semibold text-white">Фильтры</h3>
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setIsTeamModalOpen(true)}
-                className="bg-white/5 hover:bg-white/10 border border-white/10 text-white px-3 py-2 rounded-xl flex items-center gap-2 transition-all text-sm backdrop-blur-xl"
-              >
-                <Users size={16} />
-                <span className="hidden sm:inline">Управление командами</span>
-              </button>
-              <button
-                onClick={addGoal}
-                className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 border border-emerald-500/50 shadow-lg shadow-emerald-500/30 text-white px-3 py-2 rounded-xl flex items-center gap-2 transition-all text-sm backdrop-blur-xl"
-              >
-                <Plus size={16} />
-                <span className="hidden sm:inline">Добавить цель</span>
-              </button>
-            </div>
+{!readOnly && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setIsTeamModalOpen(true)}
+                  className="bg-white/5 hover:bg-white/10 border border-white/10 text-white px-3 py-2 rounded-xl flex items-center gap-2 transition-all text-sm backdrop-blur-xl"
+                >
+                  <Users size={16} />
+                  <span className="hidden sm:inline">Управление командами</span>
+                </button>
+                <button
+                  onClick={addGoal}
+                  className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 border border-emerald-500/50 shadow-lg shadow-emerald-500/30 text-white px-3 py-2 rounded-xl flex items-center gap-2 transition-all text-sm backdrop-blur-xl"
+                >
+                  <Plus size={16} />
+                  <span className="hidden sm:inline">Добавить цель</span>
+                </button>
+              </div>
+)}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -672,7 +676,15 @@ export function Goals() {
 
                     {/* Actions */}
                     <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-gray-700/30">
-                      {editingGoal?.id === goal.id ? (
+                      {readOnly ? (
+                        <button
+                          type="button"
+                          className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white"
+                          onClick={() => setShowComments(showComments === goal.id ? null : goal.id)}
+                        >
+                          Комментарии ({goal.comments.length})
+                        </button>
+                      ) : editingGoal?.id === goal.id ? (
                         <>
                           <button
                             onClick={() => {
@@ -802,22 +814,24 @@ export function Goals() {
                             <p className="text-sm text-gray-500 text-center py-4">Комментариев пока нет</p>
                           )}
                         </div>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={newComment}
-                            onChange={(e) => setNewComment(e.target.value)}
-                            placeholder="Добавить комментарий..."
-                            className="flex-1 bg-[#0a0a0a]/50 border border-gray-700/30 rounded-lg px-4 py-2 text-white text-sm"
-                            onKeyPress={(e) => e.key === 'Enter' && addComment(goal.id)}
-                          />
-                          <button
-                            onClick={() => addComment(goal.id)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-                          >
-                            <Send size={16} />
-                          </button>
-                        </div>
+{!readOnly && (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={newComment}
+                              onChange={(e) => setNewComment(e.target.value)}
+                              placeholder="Добавить комментарий..."
+                              className="flex-1 bg-[#0a0a0a]/50 border border-gray-700/30 rounded-lg px-4 py-2 text-white text-sm"
+                              onKeyPress={(e) => e.key === 'Enter' && addComment(goal.id)}
+                            />
+                            <button
+                              onClick={() => addComment(goal.id)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+                            >
+                              <Send size={16} />
+                            </button>
+                          </div>
+)}
                       </div>
                     )}
                   </div>

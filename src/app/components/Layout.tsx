@@ -73,7 +73,7 @@ const normalizeMenuPayload = (raw: any): { items: MenuItemConfig[]; customPages:
   return { items: mergedItems, customPages };
 };
 
-export function Layout() {
+export function Layout({ readOnly = false }: { readOnly?: boolean } = {}) {
   const location = useLocation();
   const navigate = useNavigate();
   const isPresentationViewer =
@@ -476,7 +476,7 @@ export function Layout() {
   if (isPresentationViewer) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0a0a0f] via-[#0f0f14] to-[#0a0a0f]">
-        <Outlet context={{ currentQuarter, setCurrentQuarter, currentYear, isEditingMode, setIsEditingMode }} />
+        <Outlet context={{ currentQuarter, setCurrentQuarter, currentYear, isEditingMode, setIsEditingMode, readOnly }} />
       </div>
     );
   }
@@ -707,7 +707,7 @@ export function Layout() {
           {/* Spacer */}
           <div className="flex-1"></div>
 
-          {!isMenuSettingsMode && (
+          {!readOnly && !isMenuSettingsMode && (
             <button
               onClick={() => setIsMenuPasswordOpen(true)}
               className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:text-white text-sm transition-all opacity-60 hover:opacity-100"
@@ -718,7 +718,11 @@ export function Layout() {
             </button>
           )}
 
-          {/* User Info & Logout */}
+          {readOnly ? (
+            <Link to="/login" className="flex items-center gap-3 border-t border-white/10 px-4 py-3 text-sm text-gray-300 hover:text-white">
+              Войти
+            </Link>
+          ) : (
           <div className="border-t border-white/10 pt-4 mt-4">
             <div className="flex items-center gap-3 px-4 py-3 text-gray-400 mb-2">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-medium">
@@ -741,6 +745,7 @@ export function Layout() {
               <span>Выйти</span>
             </button>
           </div>
+          )}
         </nav>
       </aside>
 
@@ -789,7 +794,7 @@ export function Layout() {
                       <Download size={16} />
                       <span className="hidden sm:inline">Выгрузить</span>
                     </button>
-                  ) : showEditButton ? (
+                  ) : !readOnly && showEditButton ? (
                     isLivingDashboard && isEditingMode ? (
                       <div className="h-full w-full flex items-center gap-2">
                         <button
@@ -848,7 +853,7 @@ export function Layout() {
 
         {/* Page Content */}
         <div className="flex-1 w-full max-w-[100vw] overflow-x-hidden">
-          <Outlet context={{ currentQuarter, setCurrentQuarter, currentYear, isEditingMode, setIsEditingMode }} />
+          <Outlet context={{ currentQuarter, setCurrentQuarter, currentYear, isEditingMode, setIsEditingMode, readOnly }} />
         </div>
       </main>
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useOutletContext, useParams } from 'react-router';
 import { ChevronLeft, ChevronRight, Loader2, MoveUp, MoveDown, Settings, X, Trash2, Upload, Download } from 'lucide-react';
 import { Button } from '../components/dashboard_new/ui/button';
 import {
@@ -189,6 +189,7 @@ const rewriteAssetLinks = (html: string, assetsMap: Map<string, string>) => {
 };
 
 export function PresentationPackagePage() {
+  const { readOnly } = useOutletContext<{ readOnly: boolean }>();
   const { presentationId } = useParams<{ presentationId: string }>();
 
   const [item, setItem] = useState<PresentationPackagePayload | null>(null);
@@ -561,14 +562,16 @@ export function PresentationPackagePage() {
           <Link to="/presentations" className="text-sm text-gray-300 hover:text-white transition-colors">
             ← К списку презентаций
           </Link>
-          <button
-            type="button"
-            onClick={openOrderEditor}
-            className="p-2 rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10 transition-all"
-            title="Настройки просмотра"
-          >
-            <Settings size={18} />
-          </button>
+{!readOnly && (
+            <button
+              type="button"
+              onClick={openOrderEditor}
+              className="p-2 rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10 transition-all"
+              title="Настройки просмотра"
+            >
+              <Settings size={18} />
+            </button>
+)}
         </div>
       </div>
 
