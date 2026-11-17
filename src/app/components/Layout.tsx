@@ -1,12 +1,12 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
-import { BarChart3, Target, ChevronLeft, ChevronRight, Edit3, X, Goal, Download, LogOut, CalendarDays, Settings, EyeOff, Eye, Save, TrendingUp, GripVertical, Plus, FileText, Trash2, LayoutDashboard } from 'lucide-react';
+import { BarChart3, Target, ChevronLeft, ChevronRight, Edit3, X, Goal, Download, LogOut, CalendarDays, Settings, EyeOff, Eye, Save, TrendingUp, GripVertical, Plus, FileText, Trash2, LayoutDashboard, ListChecks } from 'lucide-react';
 import { useEffect, useMemo, useState, type DragEvent } from 'react';
 import * as XLSX from 'xlsx';
 import { authAPI, getCurrentUser, goalsAPI, menuAPI } from '../utils/api';
 import { PasswordModal } from './PasswordModal';
 
 interface MenuItemConfig {
-  id: 'scorecard' | 'living-dashboard' | 'mbo' | 'events' | 'metrics' | 'goals' | 'ksh-cdpo' | 'presentations';
+  id: 'scorecard' | 'living-dashboard' | 'mbo' | 'events' | 'metrics' | 'goals' | 'ksh-cdpo' | 'presentations' | 'tasks';
   label: string;
   hidden?: boolean;
   order: number;
@@ -29,6 +29,7 @@ const DEFAULT_MENU: MenuItemConfig[] = [
   { id: 'living-dashboard', label: 'Дашборд', order: 2 },
   { id: 'mbo', label: 'MBO', order: 3 },
   { id: 'events', label: 'Календарь', order: 4 },
+  { id: 'tasks', label: 'Задачи', order: 4.5 },
   { id: 'metrics', label: 'Важные метрики', order: 5 },
   { id: 'goals', label: 'Цели квартала', order: 6 },
   { id: 'ksh-cdpo', label: 'КШ CDPO', order: 7 },
@@ -39,6 +40,7 @@ const MENU_META = {
   scorecard: { path: '/', icon: Target },
   'living-dashboard': { path: '/living-dashboard', icon: LayoutDashboard },
   events: { path: '/dashboard', icon: CalendarDays },
+  tasks: { path: '/tasks', icon: ListChecks },
   mbo: { path: '/mbo', icon: BarChart3 },
   metrics: { path: '/metrics', icon: BarChart3 },
   goals: { path: '/goals', icon: Goal },
@@ -106,6 +108,7 @@ export function Layout({ readOnly = false }: { readOnly?: boolean } = {}) {
     return location.pathname === path;
   };
   const isEventsDashboard = isActive('/dashboard');
+  const isTasksPage = isActive('/tasks');
   const isMboPage = isActive('/mbo');
   const isLivingDashboard = isActive('/living-dashboard');
   const showEditButton =
@@ -117,7 +120,7 @@ export function Layout({ readOnly = false }: { readOnly?: boolean } = {}) {
     location.pathname.startsWith('/ksh-cdpo') ||
     location.pathname.startsWith('/workspace/');
   const showGoalsExport = isActive('/goals');
-  const showQuarterSelector = !isEventsDashboard && !isMboPage;
+  const showQuarterSelector = !isEventsDashboard && !isMboPage && !isTasksPage;
 
   useEffect(() => {
     const loadMenu = async () => {
@@ -136,16 +139,16 @@ export function Layout({ readOnly = false }: { readOnly?: boolean } = {}) {
   }, []);
 
   useEffect(() => {
-    if (isEventsDashboard && isEditingMode) {
+    if ((isEventsDashboard || isTasksPage) && isEditingMode) {
       setIsEditingMode(false);
     }
-  }, [isEventsDashboard, isEditingMode, setIsEditingMode]);
+  }, [isEventsDashboard, isTasksPage, isEditingMode, setIsEditingMode]);
 
   const visibleMenu = useMemo(() => {
     return [...menuConfig]
-      .filter((item) => !item.hidden)
+      .filter((item) => !item.hidden && (!readOnly || item.id !== 'tasks'))
       .sort((a, b) => a.order - b.order);
-  }, [menuConfig]);
+  }, [menuConfig, readOnly]);
 
   const visibleCustomPages = useMemo(() => {
     return [...customPages]
@@ -486,14 +489,14 @@ export function Layout({ readOnly = false }: { readOnly?: boolean } = {}) {
       {/* Sidebar */}
       <aside className={`w-full flex flex-col border-b md:border-r md:border-b-0 border-white/5 shrink-0 bg-gradient-to-b from-[#0f0f14] via-[#0a0a0f] to-[#0a0a0f] transition-[width] duration-300 ${isMenuSettingsMode ? 'md:w-[22rem]' : 'md:w-64'}`}>
         {/* Logo */}
-        <div className="p-4 md:p-6 border-b border-white/5 flex justify-between items-center md:block">
+        <div className="p-4 md:p-6 border-b border-white/5 flex flex-wrap justify-between items-center gap-2 md:block">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 md:w-10 md:h-10 overflow-hidden rounded-xl">
               <img src="/app-icon.png" alt="Дашборд дирекции" className="w-full h-full object-cover" />
             </div>
             <span className="text-white font-semibold hidden sm:inline">Альфа-Бизнес</span>
           </div>
-          <div className="md:hidden flex gap-2">
+          <div className="md:hidden flex max-w-full flex-wrap gap-1">
             {visibleMenu.map((item) => {
               const meta = MENU_META[item.id];
               const Icon = meta.icon;
@@ -501,6 +504,8 @@ export function Layout({ readOnly = false }: { readOnly?: boolean } = {}) {
                 <Link
                   key={item.id}
                   to={meta.path}
+                  aria-label={item.label}
+                  aria-current={isMenuPathActive(meta.path) ? 'page' : undefined}
                   className={`p-2 rounded-xl transition-all ${isMenuPathActive(meta.path) ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/30' : 'text-gray-400 hover:text-white'}`}
                 >
                   <Icon size={20} />
@@ -752,7 +757,7 @@ export function Layout({ readOnly = false }: { readOnly?: boolean } = {}) {
       {/* Content */}
       <main className="flex-1 overflow-x-hidden flex flex-col">
         {/* Fixed Header Controls */}
-        <div className="sticky top-0 z-40 bg-[#0a0a0f]/80 backdrop-blur-xl border-b border-white/5">
+        <div className={`${isTasksPage ? 'hidden sm:block' : ''} sticky top-0 z-40 bg-[#0a0a0f]/80 backdrop-blur-xl border-b border-white/5`}>
           <div className="p-4 md:p-8 md:pb-4">
             <div className="max-w-5xl mx-auto flex min-h-[44px] flex-col sm:flex-row items-center justify-between gap-3 md:gap-4 w-full">
               {/* Title with Gradient */}
@@ -760,7 +765,7 @@ export function Layout({ readOnly = false }: { readOnly?: boolean } = {}) {
                 Альфа-Бизнес & Digital sales
               </h1>
               
-              <div className="flex min-h-[42px] w-full items-center justify-end gap-3 md:gap-4 sm:w-[380px]">
+              <div className={isTasksPage ? 'hidden' : 'flex min-h-[42px] w-full items-center justify-end gap-3 md:gap-4 sm:w-[380px]'}>
                 <div className="h-[42px] w-[180px] shrink-0">
                   {showQuarterSelector ? (
                     <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-2 h-full w-full flex items-center justify-between shadow-xl shadow-black/20">

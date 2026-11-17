@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createBrowserRouter, Navigate } from "react-router";
+import { createBrowserRouter, Navigate, useOutletContext } from "react-router";
 import { Layout } from "./components/Layout";
 import { Dashboard } from "./pages/Dashboard";
 import { Metrics } from "./pages/Metrics";
@@ -65,6 +65,16 @@ const DashboardRoute = () => {
   return <Layout key={String(isAuthenticated)} readOnly={!isAuthenticated} />;
 };
 
+const TasksRoute = async () => {
+  const { TasksPage } = await import("./pages/TasksPage");
+  return {
+    Component: function AuthenticatedTasks() {
+      const { readOnly } = useOutletContext<{ readOnly: boolean }>();
+      return readOnly ? <Navigate to="/login" replace /> : <TasksPage />;
+    },
+  };
+};
+
 export const router = createBrowserRouter([
   {
     path: "/login",
@@ -82,6 +92,7 @@ export const router = createBrowserRouter([
       { path: "living-dashboard", Component: LivingDashboard },
       { path: "mbo", Component: MboPage },
       { path: "dashboard", Component: EventsDashboard },
+      { path: "tasks", lazy: TasksRoute },
       { path: "metrics", Component: Metrics },
       { path: "goals", Component: Goals },
       { path: "ksh-cdpo", Component: KshCdpoPage },
